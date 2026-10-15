@@ -17,7 +17,7 @@ declare module 'epubjs' {
   }
 
   export interface Location {
-    start: { index?: number; href?: string; page?: number; percentage?: number; displayed?: { page: number; total: number } };
+    start: { index?: number; href?: string; cfi?: string; page?: number; percentage?: number; displayed?: { page: number; total: number } };
     end: Record<string, unknown>;
     at?: unknown;
   }
@@ -60,6 +60,7 @@ declare module 'epubjs' {
     locations: {
       generate(chars?: number): Promise<number>;
       cfiFromPercentage(percentage: number): string | null;
+      cfiFromLocation(loc: number): string | null;
       percentageFromCfi(cfi: string): number | null;
       total: number;
     };

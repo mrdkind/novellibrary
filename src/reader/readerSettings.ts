@@ -261,3 +261,52 @@ export function effectiveDirection(s: ReaderSettings, bookLanguage: string | nul
   }
   return s.direction;
 }
+
+/* ---------------- نوار ناوبری درون‌صفحه فصل ---------------- */
+
+/**
+ * CSS نوار ناوبری فصل (فصل قبلی / فهرست فصل‌ها / فصل بعدی) که در ابتدا و انتهای
+ * هر فصل داخل سند کتاب تزریق می‌شود. این نوار بخشی از جریان محتوا است (نه شناور
+ * روی متن) و رنگ‌هایش از تم جاری کتاب ارث می‌رسد (color: inherit).
+ */
+export const CHAPTER_NAV_CSS = `
+  .ns-ch-nav {
+    display: flex;
+    align-items: stretch;
+    gap: 0.45rem;
+    margin: 1.2rem 0;
+    padding: 0.5rem;
+    border: 1px solid rgba(128, 128, 128, 0.32);
+    border-radius: 14px;
+    background: rgba(128, 128, 128, 0.07);
+  }
+  /* فاصله بیشتر از آخرین پاراگراف فصل — درخواست کاربر: دکمه‌ها روی متن نیفتند */
+  .ns-ch-nav.ns-end { margin-block-start: 2.6rem; }
+  .ns-ch-nav button {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.5rem 0.4rem;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    background: rgba(128, 128, 128, 0.16);
+    color: inherit;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    transition: background-color 0.15s ease, transform 0.12s ease;
+  }
+  .ns-ch-nav button .lbl {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ns-ch-nav button:not(:disabled):hover { background: rgba(128, 128, 128, 0.27); }
+  .ns-ch-nav button:not(:disabled):active { transform: scale(0.97); }
+  .ns-ch-nav button:disabled { opacity: 0.38; cursor: default; }
+  .ns-ch-nav .ns-toc-btn { flex: 1.35; font-weight: 700; }
+`;

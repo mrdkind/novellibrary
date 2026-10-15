@@ -815,6 +815,37 @@ a:hover {
   overflow: hidden;
 }
 
+/* دکمه بستن بخش خوش‌آمد — بخش راهنمایی اول سایت فقط بار اول دیده می‌شود */
+.hero .hero-close {
+  position: absolute;
+  top: 0.8rem;
+  inset-inline-end: 0.8rem;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.hero .hero-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.hero .hero-close:active {
+  transform: scale(0.92);
+}
+
+.hero .hero-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .hero h1 {
   margin: 0 0 0.4rem;
   font-size: clamp(1.4rem, 3.2vw, 2rem);
@@ -1515,7 +1546,9 @@ a:hover {
 .reader-statusbar .tbtn:focus-visible,
 .reader-panel .tbtn:focus-visible,
 .autoscroll-pill .pill-btn:focus-visible,
-.next-chapter-btn:focus-visible,
+.chapter-popup .tbtn:focus-visible,
+.chapter-popup .cp-list :focus-visible,
+.chapter-popup .cp-search input:focus-visible,
 .reader-panel .panel-content :focus-visible,
 .reader-hint:focus-visible {
   outline: 2px solid var(--reader-accent);
@@ -1602,11 +1635,12 @@ a:hover {
 }
 
 /* نواحی لمسی برای صفحه بعدی/قبلی (فقط حالت صفحه‌بندی‌شده)
-   منطق فیزیکی کتاب: لبه inline-end (سمت پیشروی خواندن) = بعدی */
+   منطق فیزیکی کتاب: لبه inline-end (سمت پیشروی خواندن) = بعدی
+   فاصله از بالا/پایین بیشتر تا با نوار ناوبری فصل (تزریق‌شده در ابتدا/انتهای فصل) تداخل نکند */
 .tap-zone {
   position: absolute;
-  top: 12%;
-  bottom: 12%;
+  top: 16%;
+  bottom: 16%;
   width: 28%;
   z-index: 5;
   background: transparent;
@@ -1621,59 +1655,6 @@ a:hover {
 }
 .tap-zone.end {
   inset-inline-end: 0;
-}
-
-/* دکمه شناور فصل/جلد بعدی — در هر دو حالت مخفی/نمایانِ کنترل‌ها دیده می‌شود */
-.next-chapter-btn {
-  position: absolute;
-  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  inset-inline-start: 50%;
-  transform: translateX(50%);
-  z-index: 26;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.7rem 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--reader-accent) 62%, var(--reader-border));
-  border-radius: 999px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--reader-accent) 88%, #fff 12%), var(--reader-accent));
-  color: var(--reader-accent-ink);
-  font-weight: 700;
-  font-size: 0.9rem;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: var(--reader-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  animation: riseIn 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-  transition: transform 0.15s ease, filter 0.15s ease;
-  touch-action: manipulation;
-  max-width: min(88vw, 420px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.next-chapter-btn.with-chrome {
-  bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
-}
-
-.next-chapter-btn:hover {
-  filter: brightness(1.07);
-  transform: translateX(50%) translateY(-1px);
-}
-
-.next-chapter-btn:active {
-  transform: translateX(50%) scale(0.97);
-}
-
-@keyframes riseIn {
-  from {
-    opacity: 0;
-    transform: translateX(50%) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(50%) translateY(0);
-  }
 }
 
 /* نشانگر اسکرول خودکار */
@@ -1697,15 +1678,6 @@ a:hover {
 
 .autoscroll-pill.with-chrome {
   bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
-}
-
-/* هنگام نمایش هم‌زمان دکمه فصل بعدی، نشانگر بالای آن قرار می‌گیرد */
-.autoscroll-pill.stacked {
-  bottom: calc(4.4rem + env(safe-area-inset-bottom, 0px));
-}
-
-.autoscroll-pill.with-chrome.stacked {
-  bottom: calc(7.6rem + env(safe-area-inset-bottom, 0px));
 }
 
 .autoscroll-pill .pill-btn {
@@ -1785,15 +1757,16 @@ a:hover {
 
 /* احترام به کاهش حرکت — الزام دسترس‌پذیری */
 @media (prefers-reduced-motion: reduce) {
-  .next-chapter-btn,
   .autoscroll-pill,
-  .reader-panel {
+  .reader-panel,
+  .chapter-overlay,
+  .chapter-popup {
     animation: none;
   }
   .reader-toolbar .tbtn,
   .reader-statusbar .tbtn,
   .reader-panel .tbtn,
-  .next-chapter-btn,
+  .chapter-popup .tbtn,
   .toc-item,
   .seg-btn,
   .bookmark-item {
@@ -1840,6 +1813,171 @@ a:hover {
 .toc-item .idx {
   font-size: 0.7rem;
   color: var(--reader-muted);
+}
+
+/* عنوان فصل و نشان «در حال مطالعه» در پاپ‌آپ فهرست فصل‌ها */
+.toc-item .t {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toc-item .now {
+  flex-shrink: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--reader-accent-ink);
+  background: var(--reader-accent);
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  margin-inline-start: 0.5rem;
+}
+
+/* نشان «فصل X از Y» در نوار وضعیت کتاب‌خوان */
+.chap-chip {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--reader-muted);
+  border: 1px solid var(--reader-border);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .chap-chip {
+    display: none;
+  }
+}
+
+/* ---------- پاپ‌آپ فهرست فصل‌ها (پنجره وسط صفحه) ---------- */
+.chapter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.1rem;
+  padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
+  background: rgba(8, 9, 12, 0.5);
+  animation: fadeIn 0.16s ease;
+  overscroll-behavior: contain;
+}
+
+@supports (backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px)) {
+  .chapter-overlay {
+    background: color-mix(in srgb, var(--reader-bg) 42%, transparent);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+  }
+}
+
+.chapter-popup {
+  width: min(480px, 100%);
+  max-height: min(78vh, 660px);
+  display: flex;
+  flex-direction: column;
+  background: var(--reader-chrome);
+  color: var(--reader-fg);
+  border: 1px solid var(--reader-border);
+  border-radius: 18px;
+  box-shadow: var(--reader-shadow);
+  overflow: hidden;
+  animation: popIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.08);
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.chapter-popup header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.85rem 0.9rem;
+  padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--reader-border);
+}
+
+.chapter-popup .cp-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.chapter-popup .cp-titles strong {
+  font-size: 0.95rem;
+}
+
+.chapter-popup .cp-titles span {
+  font-size: 0.74rem;
+  color: var(--reader-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-popup .panel-close {
+  margin-inline-start: auto;
+}
+
+.chapter-popup .cp-search {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--reader-border);
+  color: var(--reader-muted);
+}
+
+.chapter-popup .cp-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--reader-fg);
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.chapter-popup .cp-search input::placeholder {
+  color: var(--reader-muted);
+}
+
+.chapter-popup .cp-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.5rem;
+}
+
+/* آیتم‌های پاپ‌آپ در یک ردیف: شماره، عنوان، نشان «در حال مطالعه» */
+.chapter-popup .toc-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid transparent;
+}
+
+.chapter-popup .cp-empty {
+  color: var(--reader-muted);
+  font-size: 0.85rem;
+  padding: 0.6rem 0.5rem;
+  margin: 0;
+  text-align: center;
 }
 
 .setting-slider {

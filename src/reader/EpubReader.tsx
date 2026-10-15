@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ePub from 'epubjs';
-import type { Book, Contents, Rendition, TocItem } from 'epubjs';
+import type { Book, Contents, Location, Rendition, TocItem } from 'epubjs';
 import {
   ArrowRight,
   BookOpen,
   Bookmark as BookmarkIcon,
   BookmarkPlus,
   Check,
-  CheckCircle2,
   ChevronLeft,
   List,
   Maximize,
@@ -16,15 +15,17 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Search,
   Settings2,
-  SkipForward,
   X,
   XCircle,
 } from 'lucide-react';
 import type { Bookmark, CustomFont, Novel, ReaderSettings, Volume } from '@/types';
 import { loadEpub, formatBytes } from '@/services/epubLoader';
 import { faDigits } from '@/services/persian';
+import { faIncludes } from '@/services/normalize';
 import {
+  CHAPTER_NAV_CSS,
   customFontFaceCss,
   effectiveDirection,
   effectivePalette,
@@ -89,6 +90,50 @@ function resolveSectionHref(book: Book, href: string): string {
   return hit?.href ?? href;
 }
 
+/** تطبیق نرم دو href فصل (فرم spine ممکن است با فرم TOC تفاوت مسیر داشته باشد) */
+function sameHref(a: string | null | undefined, b: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+/**
+ * استخراج گام اسپاین از CFI مکان‌های epub.js.
+ * مکان‌ها به‌صورت epubcfi(/6/{step}[id]!/...) هستند که step = 2*(شماره بخش + 1).
+ */
+function spineStepFromLocationCfi(cfi: string): number | null {
+  const m = /\/(\d+)(?:\[[^\]]*\])?!/.exec(cfi);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * بازه [اولین، آخرین] اندیس مکان‌های یک بخش در فضای locations کتاب.
+ * برای پرش دقیق درون‌فصلی در حالت صفحه‌بندی‌شده (نوار پایین مختص هر فصل).
+ */
+function sectionLocationRange(book: Book, sectionIndex: number): [number, number] | null {
+  const locs = (book.locations as unknown as { _locations?: string[] })._locations;
+  if (!locs || locs.length === 0) return null;
+  const step = 2 * (sectionIndex + 1);
+  let first = -1;
+  let last = -1;
+  for (let i = 0; i < locs.length; i++) {
+    if (spineStepFromLocationCfi(locs[i]) === step) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  }
+  return first < 0 ? null : [first, last];
+}
+
+/** اندیس spine یک href فصل (تطبیق نرم مسیر) */
+function spineIndexOfHref(book: Book, href: string): number {
+  const items = book.spine?.items ?? [];
+  for (let i = 0; i < items.length; i++) {
+    const h = items[i].href;
+    if (h === href || h.endsWith(`/${href}`) || href.endsWith(`/${h}`)) return i;
+  }
+  return -1;
+}
+
 export default function EpubReader(props: EpubReaderProps) {
   const {
     novel,
@@ -129,14 +174,19 @@ export default function EpubReader(props: EpubReaderProps) {
   const [percentage, setPercentage] = useState(savedPercentage ?? 0);
   const [currentChapter, setCurrentChapter] = useState('');
   const [toc, setToc] = useState<FlatTocItem[]>([]);
-  const [panel, setPanel] = useState<'none' | 'toc' | 'settings' | 'bookmarks'>('none');
+  const [panel, setPanel] = useState<'none' | 'chapters' | 'settings' | 'bookmarks'>('none');
   const [chromeVisible, setChromeVisible] = useState(settings.showToolbar);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [isBookmarked, setIsBookmarked] = useState(false);
-  /** رسیدن به انتهای فصل جاری (برای نمایش دکمه فصل/جلد بعدی) */
-  const [chapterEnd, setChapterEnd] = useState(false);
-  const [isLastSection, setIsLastSection] = useState(false);
+  /** درصد پیشرفت «درون فصل جاری» — نوار پایین مختص هر فصل است (نه کل جلد) */
+  const [chapterPct, setChapterPct] = useState(0);
+  /** href فصل جاری — برای هایلایت دقیق در پاپ‌آپ فهرست فصل‌ها */
+  const [currentHref, setCurrentHref] = useState('');
+  /** مقدار لحظه‌ای اسلایدر هنگام کشیدن (قبل از کامیت پرش) */
+  const [scrubPct, setScrubPct] = useState<number | null>(null);
+  /** فیلتر جست‌وجوی عنوان فصل در پاپ‌آپ */
+  const [chFilter, setChFilter] = useState('');
   const [autoPaused, setAutoPaused] = useState(false);
 
   const direction = useMemo(
@@ -148,6 +198,22 @@ export default function EpubReader(props: EpubReaderProps) {
   directionRef.current = direction;
 
   const isScrolled = settings.readingMode === 'scrolled';
+
+  /* ---------- رفرنس‌های وضعیت فصل جاری برای ناوبری درون‌صفحه ---------- */
+  const spineIndexRef = useRef(-1);
+  const isLastSectionRef = useRef(false);
+  const currentChapterRef = useRef('');
+  const percentageRef = useRef(percentage);
+  percentageRef.current = percentage;
+  const nextVolumeRef = useRef({ hasNextVolume, nextVolumeTitle });
+  nextVolumeRef.current = { hasNextVolume, nextVolumeTitle };
+  /** هندلر کلیک دکمه‌های نوار ناوبری داخل iframe (بدون وابستگی به بازسازی rendition) */
+  const navClickRef = useRef<(action: string) => void>(() => {});
+  const scrubTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentTocRef = useRef<HTMLDivElement | null>(null);
+  /** آینه panel برای استفاده در callbackهای بدون وابستگی */
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
 
   /* ---------- اعمال تنظیمات ظاهری روی rendition ----------
    * epub.js هوک inject خودش تم‌های سریال‌شده (رشته CSS) را نادیده می‌گیرد؛
@@ -175,12 +241,77 @@ export default function EpubReader(props: EpubReaderProps) {
         FONT_BASE_CSS +
         customFontFaceCss(customFonts) +
         themeCss(s) +
-        settingsOverrideCss(s, customFonts, directionRef.current);
+        settingsOverrideCss(s, customFonts, directionRef.current) +
+        CHAPTER_NAV_CSS;
       cssRef.current += `\nhtml { font-size: ${s.fontSize}%; }`;
       contentsRef.current.forEach((c) => injectStyleIntoDoc(c.document, cssRef.current));
     },
     [customFonts, injectStyleIntoDoc],
   );
+
+  /* ---------- نوار ناوبری فصل (فصل قبلی / فهرست فصل‌ها / فصل بعدی) ----------
+   * در ابتدا و انتهای هر فصل، داخل جریان محتوا تزریق می‌شود (نه شناور روی متن)
+   * تا فضای خودش را داشته باشد و متن زیرش نرود. */
+  const injectChapterNavs = useCallback((contents: Contents) => {
+    try {
+      const doc = contents.document;
+      const body = doc.body;
+      if (!body || doc.getElementById('ns-ch-nav-start')) return;
+      const build = (pos: 'start' | 'end') => {
+        const nav = doc.createElement('div');
+        nav.className = `ns-ch-nav ns-${pos}`;
+        nav.setAttribute('dir', directionRef.current);
+        const mk = (action: string, label: string, cls: string) => {
+          const btn = doc.createElement('button');
+          btn.type = 'button';
+          btn.className = cls;
+          btn.setAttribute('data-ns-nav', action);
+          const lbl = doc.createElement('span');
+          lbl.className = 'lbl';
+          lbl.textContent = label;
+          btn.appendChild(lbl);
+          return btn;
+        };
+        nav.appendChild(mk('prev', 'فصل قبلی', ''));
+        nav.appendChild(mk('toc', 'فهرست فصل‌ها', 'ns-toc-btn'));
+        nav.appendChild(mk('next', 'فصل بعدی', ''));
+        return nav;
+      };
+      const startNav = build('start');
+      startNav.id = 'ns-ch-nav-start';
+      body.insertBefore(startNav, body.firstChild);
+      const endNav = build('end');
+      endNav.id = 'ns-ch-nav-end';
+      body.appendChild(endNav);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** به‌روزرسانی وضعیت دکمه‌های نوار ناوبری (غیرفعال‌بودن قبلی در اولین فصل،
+   * برچسب بعدی در آخرین فصل: جلد بعدی / پایان جلد) */
+  const updateChapterNavs = useCallback(() => {
+    const idx = spineIndexRef.current;
+    const last = isLastSectionRef.current;
+    const { hasNextVolume: hv, nextVolumeTitle: nvt } = nextVolumeRef.current;
+    contentsRef.current.forEach((c) => {
+      try {
+        const doc = c.document;
+        const prevBtn = doc.querySelector('[data-ns-nav="prev"]') as HTMLButtonElement | null;
+        if (prevBtn) prevBtn.disabled = idx <= 0;
+        const nextLbl = doc.querySelector('[data-ns-nav="next"] .lbl') as HTMLElement | null;
+        if (nextLbl) {
+          nextLbl.textContent = last
+            ? hv
+              ? `جلد بعدی: ${nvt ?? ''}`
+              : 'پایان این جلد؛ بازگشت به کتاب'
+            : 'فصل بعدی';
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  }, []);
 
   /* ---------- ساخت و نمایش کتاب (با تغییر حالت نمایش یا جهت از نو ساخته می‌شود) ---------- */
   useEffect(() => {
@@ -230,6 +361,8 @@ export default function EpubReader(props: EpubReaderProps) {
           contents.window.addEventListener('unload', () => contentsRef.current.delete(contents));
           // تزریق CSS تم (epub.js تم‌های سریال‌شده را در هوک خودش پشتیبانی نمی‌کند)
           injectStyleIntoDoc(doc, cssRef.current);
+          // نوار ناوبری فصل در ابتدا و انتهای فصل — درون جریان محتوا
+          injectChapterNavs(contents);
           // دفاع در عمق: حذف هر اسکریپت جاسازی‌شده (allowScriptedContent=false هم فعال است)
           doc.querySelectorAll('script').forEach((n) => n.remove());
           // جلوگیری از ارسال فرم‌های کتاب
@@ -247,6 +380,15 @@ export default function EpubReader(props: EpubReaderProps) {
             (ev) => {
               const target = ev.target as HTMLElement | null;
               if (!target) return;
+
+              // دکمه‌های نوار ناوبری فصل (قبلی/فهرست/بعدی) — اولویت بالاتر از لینک/تصویر
+              const navBtn = target.closest('[data-ns-nav]') as HTMLButtonElement | null;
+              if (navBtn) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (!navBtn.disabled) navClickRef.current(navBtn.getAttribute('data-ns-nav') ?? '');
+                return;
+              }
 
               // بزرگ‌نمایی تصاویر
               const img = target.closest('img') as HTMLImageElement | null;
@@ -319,22 +461,24 @@ export default function EpubReader(props: EpubReaderProps) {
 
           setPercentage(pct);
 
-          /* --- تشخیص انتهای فصل (حالت صفحه‌بندی‌شده) ---
-           * displayed.page === displayed.total یعنی آخرین صفحه فصل جاری */
+          /* --- جایگاه درون فصل (نوار پایین مختص هر فصل) ---
+           * حالت صفحه‌بندی‌شده: displayed.page/total = صفحه فعلی از صفحات همین فصل.
+           * حالت پیمایشی: توسط listener اسکرول محاسبه می‌شود. */
           const disp = loc?.end?.displayed ?? loc?.start?.displayed;
           const page = disp?.page ?? 0;
           const pageTotal = disp?.total ?? 0;
-          const atSectionEnd = pageTotal > 0 && page >= pageTotal;
           const spineItems = bookRef.current?.spine.items ?? [];
           const startIndex = loc?.start?.index ?? -1;
           const last = spineItems.length > 0 && startIndex >= spineItems.length - 1;
-          if (isScrolled) {
-            // در حالت پیمایشی، اسکرول به ته ظرف تشخیص داده می‌شود (listener جداگانه)
-            setIsLastSection(last);
-          } else {
-            setChapterEnd(Boolean(atSectionEnd) || Boolean(loc?.atEnd));
-            setIsLastSection(last);
+          spineIndexRef.current = startIndex;
+          isLastSectionRef.current = last;
+
+          if (!isScrolled) {
+            setChapterPct(pageTotal > 0 ? Math.min(1, Math.max(0, page / pageTotal)) : 0);
           }
+          if (href) setCurrentHref(href);
+          // برچسب/وضعیت دکمه‌های نوار ناوبری درون‌صفحه (فصل قبلی/بعدی)
+          updateChapterNavs();
 
           // عنوان فصل جاری از TOC خود کتاب یا کاتالوگ
           if (href) {
@@ -342,6 +486,7 @@ export default function EpubReader(props: EpubReaderProps) {
               tocRef.current.find((t) => href.endsWith(t.href) || t.href.endsWith(href)) ??
               volumeRef.current.chapters.find((c) => href.endsWith(c.href));
             const chapterTitle = match?.title ?? '';
+            currentChapterRef.current = chapterTitle;
             setCurrentChapter(chapterTitle);
             if (cfi && href && lastReadHrefRef.current !== href) {
               lastReadHrefRef.current = href;
@@ -495,49 +640,141 @@ export default function EpubReader(props: EpubReaderProps) {
     await r.display(resolved).catch(() => {});
   }, []);
 
-  const seekPercentage = useCallback((pct: number) => {
-    const book = bookRef.current;
-    const r = renditionRef.current;
-    if (!book || !r) return;
-    try {
-      const cfi = book.locations.total > 0 ? book.locations.cfiFromPercentage(pct) : null;
-      if (cfi) {
-        void r.display(cfi).catch(() => {});
-        return;
-      }
-      const items = book.spine.items;
-      const idx = Math.min(items.length - 1, Math.max(0, Math.round(pct * (items.length - 1))));
-      const href = items[idx]?.href;
-      if (href) void r.display(href).catch(() => {});
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  /* ---------- دکمه فصل/جلد بعدی در انتهای فصل ---------- */
-  const handleNextChapter = useCallback(() => {
-    setPanel('none');
-    if (isLastSection) {
-      flushSave();
-      onNextVolume();
-    } else {
-      goNext();
-    }
-  }, [isLastSection, flushSave, onNextVolume, goNext]);
-
-  /* ---------- تشخیص انتهای فصل در حالت پیمایشی (اسکرول به ته) ---------- */
+  /* ---------- درصد درون‌فصلی در حالت پیمایشی (اسکرول ظرف) ---------- */
   useEffect(() => {
     if (!isScrolled || status !== 'ready') return;
     const el = scrollContainerRef.current;
     if (!el) return;
     const onScroll = () => {
-      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 72;
-      setChapterEnd(atBottom);
+      const max = el.scrollHeight - el.clientHeight;
+      setChapterPct(max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 0);
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => el.removeEventListener('scroll', onScroll);
-  }, [isScrolled, status, currentChapter]);
+  }, [isScrolled, status]);
+
+  /* ---------- پاک‌سازی تایمر کشیدن اسلایدر ---------- */
+  useEffect(
+    () => () => {
+      if (scrubTimerRef.current) clearTimeout(scrubTimerRef.current);
+    },
+    [],
+  );
+
+  /** باز کردن پاپ‌آپ فهرست فصل‌ها — همیشه با فیلتر خالی */
+  const openChapters = useCallback(() => {
+    setChFilter('');
+    setPanel('chapters');
+  }, []);
+
+  /* ---------- دکمه‌های نوار ناوبری فصل داخل iframe ---------- */
+  const handleNavAction = useCallback(
+    (action: string) => {
+      if (action === 'toc') {
+        openChapters();
+        return;
+      }
+      const book = bookRef.current;
+      const r = renditionRef.current;
+      if (!book || !r) return;
+      const idx = spineIndexRef.current;
+      if (action === 'prev') {
+        // پرش به ابتدای فصل قبلی (در اولین فصل، دکمه غیرفعال است)
+        if (idx > 0) {
+          const target = book.spine.items[idx - 1];
+          if (target) void r.display(target.href).catch(() => {});
+        }
+        return;
+      }
+      if (action === 'next') {
+        // در آخرین فصل: جلد بعدی / بازگشت به کتاب
+        if (isLastSectionRef.current) {
+          flushSave();
+          onNextVolume();
+          return;
+        }
+        const target = book.spine.items[idx + 1];
+        if (target) void r.display(target.href).catch(() => {});
+      }
+    },
+    [flushSave, onNextVolume, openChapters],
+  );
+  navClickRef.current = handleNavAction;
+
+  /* ---------- پرش درون فصل (نوار پایین مختص هر فصل) ---------- */
+  const commitChapterSeek = useCallback(
+    (frac: number) => {
+      const book = bookRef.current;
+      const r = renditionRef.current;
+      if (!book || !r) return;
+      const f = Math.min(1, Math.max(0, frac));
+      if (isScrolled) {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        const max = el.scrollHeight - el.clientHeight;
+        el.scrollTop = max > 0 ? f * max : 0;
+        // به‌روزرسانی CFI ذخیره‌شده بر اساس موقعیت جدید اسکرول
+        window.setTimeout(() => {
+          try {
+            const loc = r.currentLocation() as Location | null;
+            const cfi = loc?.start?.cfi;
+            const href = loc?.start?.href ?? lastHrefRef.current;
+            if (cfi) {
+              lastCfiRef.current = cfi;
+              resumeCfiRef.current = cfi;
+            }
+            if (href) resumeHrefRef.current = href;
+            const bookPct =
+              book.locations.total > 0 && cfi ? book.locations.percentageFromCfi(cfi) : null;
+            if (cfi && href) {
+              scheduleSave(
+                cfi,
+                href,
+                currentChapterRef.current,
+                typeof bookPct === 'number' && !Number.isNaN(bookPct) ? bookPct : percentageRef.current,
+              );
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 80);
+      } else {
+        // حالت صفحه‌بندی‌شده: پرش دقیق با نگاشت فصل → بازه مکان‌ها
+        const idx = spineIndexRef.current;
+        if (idx < 0) return;
+        const range = sectionLocationRange(book, idx);
+        if (range && book.locations.total > 0) {
+          const [first, last] = range;
+          const locIdx = Math.min(book.locations.total, Math.max(0, Math.round(first + (last - first) * f)));
+          const cfi = book.locations.cfiFromLocation(locIdx);
+          if (cfi) {
+            void r.display(cfi).catch(() => {});
+            return;
+          }
+        }
+        // فالبک (بدون locations): پرش به ابتدای فصل
+        const item = book.spine.items[idx];
+        if (item) void r.display(item.href).catch(() => {});
+      }
+    },
+    [isScrolled, scheduleSave],
+  );
+
+  /** کشیدن اسلایدر: بازخورد فوری + کامیت پرش با تاخیر کوتاه (جلوگیری از تراکم display) */
+  const onChapterSliderInput = useCallback(
+    (raw: number) => {
+      const frac = raw / 1000;
+      setScrubPct(frac);
+      if (scrubTimerRef.current) clearTimeout(scrubTimerRef.current);
+      scrubTimerRef.current = setTimeout(() => {
+        scrubTimerRef.current = null;
+        commitChapterSeek(frac);
+        setScrubPct(null);
+      }, 280);
+    },
+    [commitChapterSeek],
+  );
 
   /* ---------- اسکرول خودکار ---------- */
   const autoPausedRef = useRef(false);
@@ -622,7 +859,9 @@ export default function EpubReader(props: EpubReaderProps) {
           break;
         case 't':
         case 'T':
-          setPanel((p) => (p === 'toc' ? 'none' : 'toc'));
+          // بستن/بازکردن پاپ‌آپ فهرست فصل‌ها (بازشدن همیشه با فیلتر خالی)
+          if (panelRef.current === 'chapters') setPanel('none');
+          else openChapters();
           break;
         case 's':
         case 'S':
@@ -654,7 +893,7 @@ export default function EpubReader(props: EpubReaderProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [direction, settings.readingMode, panel, lightbox, goNext, goPrev]);
+  }, [direction, settings.readingMode, panel, lightbox, goNext, goPrev, openChapters]);
 
   /* ---------- تمام‌صفحه ---------- */
   const toggleFullscreen = useCallback(async () => {
@@ -706,8 +945,61 @@ export default function EpubReader(props: EpubReaderProps) {
   };
 
   /* ---------- رندر ---------- */
-  const percentLabel = faDigits(Math.round(percentage * 100)) + '٪';
-  const pal = useMemo(() => effectivePalette(settings), [settings.theme, settings.textColor, settings.bgColor, settings.bgImageOpacity]);
+  const pal = useMemo(
+    () => effectivePalette(settings),
+    [settings.theme, settings.textColor, settings.bgColor, settings.bgImageOpacity],
+  );
+
+  /** اندیس فصل جاری در فهرست مطالب.
+   * فالبک: در صفحات خارج از فهرست (جلد/عنوان)، نزدیک‌ترین فصلِ بعدی نشان داده می‌شود
+   * تا «فصلی که در جریانش هستیم» دقیقاً هایلایت شود. */
+  const currentTocIndex = useMemo(() => {
+    if (!currentHref || toc.length === 0) return -1;
+    const direct = toc.findIndex((t) => sameHref(currentHref, t.href));
+    if (direct >= 0) return direct;
+    const book = bookRef.current;
+    if (!book) return -1;
+    const cur = spineIndexOfHref(book, currentHref);
+    if (cur < 0) return -1;
+    let best = -1;
+    let bestSpine = Infinity;
+    for (let i = 0; i < toc.length; i++) {
+      const si = spineIndexOfHref(book, toc[i].href);
+      if (si >= cur && si < bestSpine) {
+        bestSpine = si;
+        best = i;
+      }
+    }
+    return best;
+    // bookRef رفرنس است؛ status برای محاسبه پس از بارگذاری کتاب
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toc, currentHref, status]);
+
+  /** نشان «فصل X از Y» در نوار پایین — بر اساس جایگاه فصل جاری در فهرست مطالب */
+  const chapterChip = useMemo(() => {
+    if (currentTocIndex < 0 || toc.length < 2) return null;
+    return `فصل ${faDigits(currentTocIndex + 1)} از ${faDigits(toc.length)}`;
+  }, [currentTocIndex, toc.length]);
+
+  /** فهرست فصل‌ها با شماره اصلی + فیلتر جست‌وجوی فارسی */
+  const tocIndexed = useMemo(() => toc.map((t, i) => ({ ...t, num: i + 1 })), [toc]);
+  const filteredToc = useMemo(() => {
+    const q = chFilter.trim();
+    if (!q) return tocIndexed;
+    return tocIndexed.filter((t) => faIncludes(t.title, q));
+  }, [tocIndexed, chFilter]);
+
+  /** اسکرول خودکار پاپ‌آپ فهرست فصل‌ها به فصل جاری */
+  useEffect(() => {
+    if (panel !== 'chapters') return;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const raf = requestAnimationFrame(() => {
+      currentTocRef.current?.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
+    });
+    return () => cancelAnimationFrame(raf);
+    // فقط هنگام باز شدن پاپ‌آپ؛ تغییر فیلتر باعث پرش ناخواسته نمی‌شود
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel]);
 
   const shellVars = {
     '--reader-bg': pal.bg,
@@ -737,7 +1029,7 @@ export default function EpubReader(props: EpubReaderProps) {
           </span>
           <span className="chapter">{currentChapter || volume.title}</span>
           <div className="spacer" />
-          <button type="button" className="tbtn" onClick={() => setPanel((p) => (p === 'toc' ? 'none' : 'toc'))} aria-label="فهرست مطالب" title="فهرست مطالب (T)">
+          <button type="button" className="tbtn" onClick={openChapters} aria-label="فهرست فصل‌ها" title="فهرست فصل‌ها (T)">
             <List size={19} />
           </button>
           <button
@@ -847,32 +1139,9 @@ export default function EpubReader(props: EpubReaderProps) {
         )}
       </div>
 
-      {/* دکمه فصل/جلد بعدی — در هر دو حالت پنهان/نمایانِ کنترل‌ها دیده می‌شود */}
-      {status === 'ready' && chapterEnd && panel === 'none' && (
-        <button type="button" className={`next-chapter-btn ${chromeVisible ? 'with-chrome' : ''}`} onClick={handleNextChapter}>
-          {isLastSection ? (
-            hasNextVolume ? (
-              <>
-                <SkipForward size={16} /> جلد بعدی: {nextVolumeTitle}
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={16} /> پایان این جلد؛ بازگشت به کتاب
-              </>
-            )
-          ) : (
-            <>
-              <SkipForward size={16} /> فصل بعدی
-            </>
-          )}
-        </button>
-      )}
-
       {/* نشانگر اسکرول خودکار */}
       {status === 'ready' && settings.autoScroll && isScrolled && (
-        <div
-          className={`autoscroll-pill ${chromeVisible ? 'with-chrome' : ''} ${chapterEnd ? 'stacked' : ''}`}
-        >
+        <div className={`autoscroll-pill ${chromeVisible ? 'with-chrome' : ''}`}>
           <button
             type="button"
             className="pill-btn"
@@ -893,66 +1162,99 @@ export default function EpubReader(props: EpubReaderProps) {
         </div>
       )}
 
-      {/* نوار وضعیت و پرش */}
+      {/* نوار وضعیت و پرش — مختص فصل جاری (نه کل جلد)، طبق درخواست کاربر */}
       {chromeVisible && (
         <div className="reader-statusbar">
           {/* بر اساس درخواست کاربر: فلش راست‌نما = بعدی، فلش چپ‌نما = قبلی */}
-          <button type="button" className="tbtn" onClick={goNext} aria-label="بعدی" title="بعدی">
+          <button type="button" className="tbtn" onClick={goNext} aria-label="صفحه بعدی" title="صفحه بعدی">
             <ChevronLeft size={20} style={{ transform: 'scaleX(-1)' }} />
           </button>
           <input
             type="range"
             min={0}
             max={1000}
-            value={Math.round(percentage * 1000)}
-            aria-label="پرش در کتاب"
-            onChange={(e) => {
-              const pct = Number(e.target.value) / 1000;
-              setPercentage(pct);
-              seekPercentage(pct);
-            }}
+            value={Math.round((scrubPct ?? chapterPct) * 1000)}
+            aria-label="پرش درون فصل جاری"
+            title="پرش درون فصل جاری"
+            onChange={(e) => onChapterSliderInput(Number(e.target.value))}
           />
-          <span className="pct">{percentLabel}</span>
-          <button type="button" className="tbtn" onClick={goPrev} aria-label="قبلی" title="قبلی">
+          {chapterChip && <span className="chap-chip">{chapterChip}</span>}
+          <span className="pct" title="پیشرفت فصل جاری">
+            {faDigits(Math.round((scrubPct ?? chapterPct) * 100)) + '٪'}
+          </span>
+          <button type="button" className="tbtn" onClick={goPrev} aria-label="صفحه قبلی" title="صفحه قبلی">
             <ChevronLeft size={20} />
           </button>
         </div>
       )}
 
       {/* راهنمای مخفی‌کردن کنترل‌ها */}
-      {status === 'ready' && !chromeVisible && !chapterEnd && (
+      {status === 'ready' && !chromeVisible && (
         <button type="button" className="reader-hint" onClick={() => setChromeVisible(true)}>
           نمایش کنترل‌ها (H)
         </button>
       )}
 
-      {/* ---------- پنل فهرست مطالب ---------- */}
-      {panel === 'toc' && (
-        <aside className="reader-panel" aria-label="فهرست مطالب">
-          <h3>
-            <List size={17} /> فهرست مطالب
-            <button type="button" className="tbtn panel-close" onClick={() => setPanel('none')} aria-label="بستن">
-              <X size={18} />
-            </button>
-          </h3>
-          <div className="panel-content">
-            {toc.length === 0 && <p style={{ color: 'var(--reader-muted)', fontSize: '0.85rem', padding: '0 0.5rem' }}>فهرست مطالبی برای این جلد در دسترس نیست.</p>}
-            {toc.map((item, i) => (
-              <div
-                key={`${item.href}-${i}`}
-                className={`toc-item ${(currentChapter && currentChapter === item.title) ? 'current' : ''}`}
-                style={{ paddingInlineStart: `${0.7 + item.depth * 0.9}rem` }}
-                onClick={() => void jumpTo(item.href)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && void jumpTo(item.href)}
-              >
-                <span className="idx">{faDigits(i + 1)}</span>
-                {item.title}
+      {/* ---------- پاپ‌آپ فهرست فصل‌ها (پنجره وسط صفحه، مناسب موبایل و دسکتاپ) ---------- */}
+      {panel === 'chapters' && (
+        <div
+          className="chapter-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPanel('none');
+          }}
+        >
+          <div className="chapter-popup" role="dialog" aria-modal="true" aria-label="فهرست فصل‌ها">
+            <header>
+              <List size={17} />
+              <div className="cp-titles">
+                <strong>فهرست فصل‌ها</strong>
+                <span>{volume.title}</span>
               </div>
-            ))}
+              <button type="button" className="tbtn panel-close" onClick={() => setPanel('none')} aria-label="بستن">
+                <X size={18} />
+              </button>
+            </header>
+            {toc.length > 0 && (
+              <div className="cp-search">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="جست‌وجوی عنوان فصل…"
+                  aria-label="جست‌وجوی فصل"
+                  value={chFilter}
+                  onChange={(e) => setChFilter(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="cp-list">
+              {toc.length === 0 && (
+                <p className="cp-empty">فهرست فصلی برای این جلد در دسترس نیست.</p>
+              )}
+              {toc.length > 0 && filteredToc.length === 0 && (
+                <p className="cp-empty">فصلی با این عنوان پیدا نشد.</p>
+              )}
+              {filteredToc.map((item) => {
+                const current = item.num - 1 === currentTocIndex;
+                return (
+                  <div
+                    key={`${item.href}-${item.num}`}
+                    ref={current ? currentTocRef : undefined}
+                    className={`toc-item ${current ? 'current' : ''}`}
+                    style={{ paddingInlineStart: `${0.7 + item.depth * 0.9}rem` }}
+                    onClick={() => void jumpTo(item.href)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && void jumpTo(item.href)}
+                  >
+                    <span className="idx">{faDigits(item.num)}</span>
+                    <span className="t">{item.title}</span>
+                    {current && <span className="now">در حال مطالعه</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </aside>
+        </div>
       )}
 
       {/* ---------- پنل نشانک‌ها ---------- */}

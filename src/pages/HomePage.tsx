@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BookOpen,
@@ -10,6 +10,7 @@ import {
   Sparkles,
   Tags,
   Trophy,
+  X,
 } from 'lucide-react';
 import { useCatalog } from '@/hooks/useCatalog';
 import { usePersonalData } from '@/hooks/usePersonalData';
@@ -108,6 +109,24 @@ export default function HomePage() {
   const { novels, status, error, reload } = useCatalog();
   const { favorites, ready } = usePersonalData();
 
+  /* بخش خوش‌آمد/راهنمای اول سایت فقط برای بار اول دیده می‌شود
+   * (به‌ازای هر کاربر/مرورگر — ذخیره در localStorage) */
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try {
+      return localStorage.getItem('ns-welcome-seen') !== '1';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    if (!showWelcome) return;
+    try {
+      localStorage.setItem('ns-welcome-seen', '1');
+    } catch {
+      /* حافظه در دسترس نیست — بخش در همین نشست نمایش داده می‌شود */
+    }
+  }, [showWelcome]);
+
   const recent = useMemo(() => [...novels].slice(0, 8), [novels]);
   const completed = useMemo(() => novels.filter((n) => n.status === 'completed').slice(0, 8), [novels]);
   const ongoing = useMemo(() => novels.filter((n) => n.status === 'ongoing').slice(0, 8), [novels]);
@@ -141,27 +160,38 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* هیرو */}
-      <div className="hero">
-        <h1>
-          به {SITE_NAME} خوش آمدید
-          <Sparkles size={22} style={{ color: 'var(--accent)', verticalAlign: 'middle', marginInlineStart: '0.4rem' }} />
-        </h1>
-        <p>
-          کتابخانه آنلاین مطالعه ناول و کتاب‌های EPUB، بدون ثبت‌نام و مستقیم در مرورگر. نشانک‌ها، پیشرفت مطالعه و
-          تنظیمات شما به‌صورت امن در همین مرورگر ذخیره می‌شوند.
-        </p>
-        <div className="actions">
-          <Link to="/library" className="btn primary">
-            <LibraryBig size={17} />
-            ورود به کتابخانه
-          </Link>
-          <Link to="/guide" className="btn">
-            <Compass size={17} />
-            راهنمای استفاده
-          </Link>
+      {/* هیرو — فقط بار اول (با بستن دستی هم حذف می‌شود) */}
+      {showWelcome && (
+        <div className="hero">
+          <button
+            type="button"
+            className="hero-close"
+            aria-label="بستن بخش خوش‌آمدگویی"
+            title="بستن"
+            onClick={() => setShowWelcome(false)}
+          >
+            <X size={16} />
+          </button>
+          <h1>
+            به {SITE_NAME} خوش آمدید
+            <Sparkles size={22} style={{ color: 'var(--accent)', verticalAlign: 'middle', marginInlineStart: '0.4rem' }} />
+          </h1>
+          <p>
+            کتابخانه آنلاین مطالعه ناول و کتاب‌های EPUB، بدون ثبت‌نام و مستقیم در مرورگر. نشانک‌ها، پیشرفت مطالعه و
+            تنظیمات شما به‌صورت امن در همین مرورگر ذخیره می‌شوند.
+          </p>
+          <div className="actions">
+            <Link to="/library" className="btn primary">
+              <LibraryBig size={17} />
+              ورود به کتابخانه
+            </Link>
+            <Link to="/guide" className="btn">
+              <Compass size={17} />
+              راهنمای استفاده
+            </Link>
+          </div>
         </div>
-      </div>
+      )}
 
       {isEmpty && (
         <div className="section">
