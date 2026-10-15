@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Check,
   Contrast,
@@ -11,7 +11,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { CustomFont, ReaderSettings, ReaderTheme } from '@/types';
-import { THEME_PALETTES } from './readerSettings';
+import { FONT_BASE_CSS, THEME_PALETTES } from './readerSettings';
 import { faDigits } from '@/services/persian';
 import { useToast } from '@/components/Toast';
 
@@ -31,11 +31,17 @@ const THEME_ORDER: Exclude<ReaderTheme, 'custom'>[] = [
 
 const FONT_OPTIONS: { key: ReaderSettings['fontFamily']; label: string; css?: string }[] = [
   { key: 'vazirmatn', label: 'وزیرمتن', css: "'Vazirmatn', sans-serif" },
-  { key: 'sahel', label: 'ساحل', css: "'Sahel', 'Vazirmatn', sans-serif" },
-  { key: 'shabnam', label: 'شبنم', css: "'Shabnam', 'Vazirmatn', sans-serif" },
-  { key: 'estedad', label: 'استعداد', css: "'Estedad', 'Vazirmatn', sans-serif" },
+  { key: 'sahel', label: 'ساحل', css: "'Sahel', sans-serif" },
+  { key: 'shabnam', label: 'شبنم', css: "'Shabnam', sans-serif" },
+  { key: 'samim', label: 'صمیم', css: "'Samim', sans-serif" },
+  { key: 'mikhak', label: 'میخک', css: "'Mikhak', sans-serif" },
+  { key: 'gandom', label: 'گندم', css: "'Gandom', sans-serif" },
+  { key: 'estedad', label: 'استعداد', css: "'Estedad', sans-serif" },
+  { key: 'parastoo', label: 'پرستو (سریف)', css: "'Parastoo', serif" },
   { key: 'amiri', label: 'امیری (سریف کتابی)', css: "'Amiri', serif" },
-  { key: 'naskh', label: 'نسخ (سریف)', css: "'Noto Naskh Arabic', 'Amiri', serif" },
+  { key: 'naskh', label: 'نسخ (سریف)', css: "'Noto Naskh Arabic', serif" },
+  { key: 'scheherazade', label: 'شهرزاد (نسخ سنتی)', css: "'Scheherazade New', serif" },
+  { key: 'nastaliq', label: 'نستعلیق (خوشنویسی)', css: "'Noto Nastaliq Urdu', serif" },
   { key: 'default', label: 'فونت خود کتاب', css: 'inherit' },
 ];
 
@@ -51,6 +57,16 @@ export default function ReaderSettingsPanel({
   const { toast } = useToast();
   const fontFileRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
+
+  /* ثبت @font-face فونت‌های پیش‌فرض در سند اصلی — فقط برای پیش‌نمایش دقیق کارت‌های فونت.
+   * فونت‌ها به‌صورت تنبل بارگذاری می‌شوند و بار اضافه‌ای روی صفحه نمی‌گذارند. */
+  useEffect(() => {
+    if (document.getElementById('ns-reader-fonts-preview')) return;
+    const style = document.createElement('style');
+    style.id = 'ns-reader-fonts-preview';
+    style.textContent = FONT_BASE_CSS;
+    document.head.appendChild(style);
+  }, []);
 
   const set = (patch: Partial<ReaderSettings>) => onSettingsChange({ ...settings, ...patch });
 
@@ -376,6 +392,11 @@ export default function ReaderSettingsPanel({
         >
           <Upload size={13} /> آپلود فونت دلخواه (ttf، otf، woff)
         </button>
+        {settings.fontFamily === 'nastaliq' && (
+          <p className="rsp-hint">
+            فونت نستعلیق کشیدگی عمودی زیاد دارد؛ برای خوانایی بیشتر، «فاصله خطوط» را روی ۲.۲ یا بالاتر بگذارید.
+          </p>
+        )}
         <input
           ref={fontFileRef}
           type="file"
@@ -520,7 +541,7 @@ export default function ReaderSettingsPanel({
       {/* ---------- سایر ---------- */}
       <section className="rsp-group last">
         <div className="switch-row">
-          <label htmlFor="ns-tb">نوار ابزار همیشه نمایان</label>
+          <label htmlFor="ns-tb">نمایش کنترل‌ها هنگام بازکردن کتاب</label>
           <button
             id="ns-tb"
             type="button"
@@ -532,6 +553,9 @@ export default function ReaderSettingsPanel({
             <span className="knob" />
           </button>
         </div>
+        <p className="rsp-hint">
+          در حین مطالعه، با لمس یا کلیک روی وسط صفحه، کنترل‌ها نمایش و با لمس دوباره مخفی می‌شوند.
+        </p>
         <button type="button" className="seg-btn danger block" onClick={onReset}>
           <RotateCcw size={13} /> بازنشانی همه تنظیمات
         </button>

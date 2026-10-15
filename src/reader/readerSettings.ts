@@ -143,6 +143,17 @@ export const FONT_BASE_CSS = `
   @font-face { font-family: 'Amiri'; src: url('${F}Amiri-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Amiri'; src: url('${F}Amiri-Bold.woff2') format('woff2'); font-weight: 700; }
   @font-face { font-family: 'Noto Naskh Arabic'; src: url('${F}NotoNaskh-Regular.woff2') format('woff2'); font-weight: 400 700; }
+  /* فونت‌های 추가 — میخک، گندم، پرستو، صمیم، شهرزاد، نستعلیق */
+  @font-face { font-family: 'Mikhak'; src: url('${F}Mikhak-Regular.woff2') format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'Mikhak'; src: url('${F}Mikhak-Bold.woff2') format('woff2'); font-weight: 700; }
+  @font-face { font-family: 'Gandom'; src: url('${F}Gandom-Regular.woff2') format('woff2'); font-weight: 400 700; }
+  @font-face { font-family: 'Parastoo'; src: url('${F}Parastoo-Regular.woff2') format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'Parastoo'; src: url('${F}Parastoo-Bold.woff2') format('woff2'); font-weight: 700; }
+  @font-face { font-family: 'Samim'; src: url('${F}Samim-Regular.woff2') format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'Samim'; src: url('${F}Samim-Bold.woff2') format('woff2'); font-weight: 700; }
+  @font-face { font-family: 'Scheherazade New'; src: url('${F}ScheherazadeNew-Regular.ttf') format('truetype'); font-weight: 400; }
+  @font-face { font-family: 'Scheherazade New'; src: url('${F}ScheherazadeNew-Bold.ttf') format('truetype'); font-weight: 700; }
+  @font-face { font-family: 'Noto Nastaliq Urdu'; src: url('${F}NotoNastaliqUrdu-Variable.ttf') format('truetype'); font-weight: 400 700; }
 `;
 
 /** نام خانواده CSS برای هر فونت */
@@ -151,9 +162,15 @@ export function fontStackCss(f: ReaderSettings['fontFamily'], customFonts: Custo
     case 'vazirmatn': return "'Vazirmatn', sans-serif";
     case 'sahel': return "'Sahel', 'Vazirmatn', sans-serif";
     case 'shabnam': return "'Shabnam', 'Vazirmatn', sans-serif";
+    case 'samim': return "'Samim', 'Vazirmatn', sans-serif";
+    case 'mikhak': return "'Mikhak', 'Vazirmatn', sans-serif";
+    case 'gandom': return "'Gandom', 'Vazirmatn', sans-serif";
     case 'estedad': return "'Estedad', 'Vazirmatn', sans-serif";
+    case 'parastoo': return "'Parastoo', 'Amiri', serif";
     case 'amiri': return "'Amiri', serif";
     case 'naskh': return "'Noto Naskh Arabic', 'Amiri', serif";
+    case 'scheherazade': return "'Scheherazade New', 'Amiri', serif";
+    case 'nastaliq': return "'Noto Nastaliq Urdu', 'Noto Naskh Arabic', serif";
     case 'custom': {
       const cf = customFonts.find((c) => c.id === f) ?? customFonts[0];
       return cf ? `'NS-Custom-${cssSafeId(cf.id)}', 'Vazirmatn', sans-serif` : null;

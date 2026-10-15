@@ -601,7 +601,7 @@ export default function SettingsPage() {
         <div className="setting-row">
           <div>
             <div className="label">واردکردن (Import)</div>
-            <div className="hint">فایل پشتیبان NovelShelf را انتخاب کنید. به‌صورت پیش‌فرض با اطلاعات فعلی ادغام می‌شود.</div>
+            <div className="hint">فایل پشتیبان «روایت بی‌پایان» را انتخاب کنید. به‌صورت پیش‌فرض با اطلاعات فعلی ادغام می‌شود.</div>
           </div>
           <div className="control">
             <button type="button" className="btn" onClick={() => fileRef.current?.click()}>

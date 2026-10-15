@@ -117,9 +117,15 @@ export type ReaderFontFamily =
   | 'vazirmatn'
   | 'sahel'
   | 'shabnam'
+  | 'samim'
+  | 'mikhak'
+  | 'gandom'
   | 'estedad'
+  | 'parastoo'
   | 'amiri'
   | 'naskh'
+  | 'scheherazade'
+  | 'nastaliq'
   | 'custom';
 
 /** فونت آپلودشده توسط کاربر (ذخیره در IndexedDB به‌صورت Data URL) */
@@ -157,6 +163,8 @@ export interface ReaderSettings {
   direction: TextDirection;
   /** حالت نمایش: paginated = صفحه‌بندی‌شده، scrolled = پیمایشی */
   readingMode: 'paginated' | 'scrolled';
+  /** نمایش کنترل‌ها (نوار ابزار/وضعیت) هنگام بازکردن کتاب؛
+   * در حین مطالعه، لمس/کلیک وسط صفحه کنترل‌ها را نمایش/مخفی می‌کند */
   showToolbar: boolean;
   /** رنگ سفارشی متن (وقتی theme = custom) */
   textColor: string | null;
@@ -186,7 +194,8 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   // پیش‌فرض فارسی: راست‌به‌چپ (کاربر می‌تواند «خودکار» یا LTR را انتخاب کند)
   direction: 'rtl',
   readingMode: 'scrolled',
-  showToolbar: true,
+  // کنترل‌ها هنگام ورود مخفی هستند تا روی متن نیفتند؛ با لمس وسط صفحه ظاهر می‌شوند
+  showToolbar: false,
   textColor: null,
   bgColor: null,
   bgImageUrl: null,

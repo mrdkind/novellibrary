@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SITE_NAME, SITE_TITLE } from '@/config';
 
 export function useDebounced<T>(value: T, delayMs = 250): T {
   const [debounced, setDebounced] = useState(value);
@@ -11,7 +12,7 @@ export function useDebounced<T>(value: T, delayMs = 250): T {
 
 export function useDocumentTitle(title?: string): void {
   useEffect(() => {
-    document.title = title ? `${title} — NovelShelf` : 'NovelShelf — کتابخانه ناول';
+    document.title = title ? `${title} — ${SITE_NAME}` : SITE_TITLE;
   }, [title]);
 }
 

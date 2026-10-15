@@ -1,5 +1,5 @@
-import { BookOpen, Info, Server, ShieldCheck, TriangleAlert } from 'lucide-react';
-import { CONTACT_URL, REPO_URL, SITE_NAME } from '@/config';
+import { BookOpen, Info, Send, Server, ShieldCheck, Target, TriangleAlert } from 'lucide-react';
+import { CONTACT_URL, REPO_URL, SITE_NAME, SITE_NAME_EN, TELEGRAM_HANDLE, TELEGRAM_URL } from '@/config';
 import { useDocumentTitle } from '@/hooks/misc';
 
 export default function AboutPage() {
@@ -10,10 +10,44 @@ export default function AboutPage() {
         <Info size={24} /> درباره {SITE_NAME}
       </h1>
       <p>
-        {SITE_NAME} یک کتابخانه آنلاین برای مطالعه Light Novel، Web Novel و کتاب‌های EPUB است. همه چیز مستقیم در
+        {SITE_NAME} ({SITE_NAME_EN}) یک کتابخانه آنلاین برای مطالعه ناول و کتاب‌های EPUB است. همه چیز مستقیم در
         مرورگر شما اجرا می‌شود: فایل EPUB بدون دانلود دستی باز و خوانده می‌شود، تصاویر و فهرست مطالب کتاب حفظ
         می‌شوند و می‌توانید تنظیمات مطالعه را دقیقاً به سلیقه خود تنظیم کنید.
       </p>
+
+      <h2>
+        <Target size={18} /> هدف ما
+      </h2>
+      <div className="mission-box">
+        <p>
+          هدف از راه‌اندازی {SITE_NAME}، ایجاد یک آرشیو جامع از ناول‌های ترجمه‌شده است. همچنین آثاری که ترجمه‌شان
+          نیمه‌کاره رها شده یا آثار ارزشمندی که تاکنون ترجمه‌ای نداشته‌اند، توسط تیم ما ترجمه و در این آرشیو قرار
+          می‌گیرند.
+        </p>
+        <p>
+          امیدواریم این مجموعه برای علاقه‌مندان ادبیات داستانی منبعی کامل و لذت‌بخش باشد.
+        </p>
+      </div>
+
+      <h2>
+        <Send size={18} /> کانال تلگرام ما
+      </h2>
+      <div className="tg-card">
+        <span className="tg-icon" aria-hidden="true">
+          <Send size={22} />
+        </span>
+        <div className="tg-body">
+          <strong dir="ltr">{TELEGRAM_HANDLE}</strong>
+          <p>
+            کانال تلگرام ما مرجع اطلاع‌رسانی است: انتشار کتاب‌های جدید، ادامه ترجمه‌های نیمه‌کاره، خبرهای آرشیو و
+            پشت‌صحنه تیم ترجمه. اگر عاشق ادبیات داستانی هستید، از دست ندهید — همین حالا عضو کانال شوید تا هیچ
+            انتشار جدیدی را از دست ندهید.
+          </p>
+        </div>
+        <a className="btn primary tg-join" href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer">
+          <Send size={15} /> عضویت در کانال
+        </a>
+      </div>
 
       <h2>
         <BookOpen size={18} /> امکانات
@@ -21,7 +55,7 @@ export default function AboutPage() {
       <ul>
         <li>کتاب‌خوان EPUB با دو حالت مطالعه: صفحه‌بندی‌شده (شبیه کتاب‌خوان) و پیمایشی (پیوسته)</li>
         <li>پشتیبانی کامل از رابط فارسی راست‌به‌چپ و کتاب‌های دوزبانه</li>
-        <li>تنظیمات کامل مطالعه: تم تاریک/روشن/سپیا، اندازه فونت، فاصله خطوط، عرض متن، جهت و ترازبندی</li>
+        <li>تنظیمات کامل مطالعه: تم‌های متنوع، بیش از ۱۲ فونت فارسی، اندازه فونت، فاصله خطوط، عرض متن، جهت و ترازبندی</li>
         <li>ذخیره خودکار پیشرفت مطالعه، نشانک‌ها، فصل‌های خوانده‌شده و علاقه‌مندی‌ها</li>
         <li>جست‌وجو و فیلتر با نرمال‌سازی حروف فارسی (ی/ي، ک/ك و…)</li>
         <li>خروجی و ورودی اطلاعات شخصی برای انتقال بین دستگاه‌ها</li>
@@ -63,6 +97,11 @@ export default function AboutPage() {
         </h2>
       )}
       <ul>
+        <li>
+          <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer">
+            کانال تلگرام {SITE_NAME} ({TELEGRAM_HANDLE})
+          </a>
+        </li>
         {REPO_URL && (
           <li>
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
@@ -78,12 +117,6 @@ export default function AboutPage() {
           </li>
         )}
       </ul>
-      {!REPO_URL && !CONTACT_URL && (
-        <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-          نشانی مخزن و راه گزارش مشکل هنوز تنظیم نشده است؛ مطابق README، پس از ساخت مخزن، مقدار REPO_URL را در
-          فایل src/config.ts تنظیم کنید تا این بخش فعال شود.
-        </p>
-      )}
     </div>
   );
 }

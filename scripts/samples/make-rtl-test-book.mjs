@@ -60,7 +60,7 @@ zip.file('OEBPS/content.opf', `<?xml version="1.0" encoding="UTF-8"?>
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="bid">urn:uuid:rtl-test-0001</dc:identifier>
     <dc:title>آزمون راست‌به‌چپ</dc:title>
-    <dc:creator>NovelShelf Test</dc:creator>
+    <dc:creator>Novel Library Test</dc:creator>
     <dc:language>fa</dc:language>
     <meta property="dcterms:modified">2026-10-15T00:00:00Z</meta>
   </metadata>
@@ -83,7 +83,7 @@ fs.writeFileSync(path.join(OUT, 'info.json'), JSON.stringify({
   titleOriginal: 'آزمون راست‌به‌چپ',
   titleFa: 'آزمون راست‌به‌چپ (بدون dir)',
   titleAlt: [],
-  author: 'NovelShelf Test',
+  author: 'Novel Library Test',
   translator: null,
   description: 'کتاب آزمایشی بدون صفت dir برای تأیید تزریق جهت در کتاب‌خوان.',
   genres: ['آزمون'],

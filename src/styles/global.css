@@ -1,5 +1,5 @@
 /* ============================================================
-   NovelShelf — سیستم طراحی اختصاصی
+   روایت بی‌پایان | Novel Library — سیستم طراحی اختصاصی
    تم تاریک پیش‌فرض + تم روشن | RTL | فونت وزیرمتن (محلی)
    ============================================================ */
 
@@ -164,6 +164,10 @@ html,
 body {
   margin: 0;
   padding: 0;
+  /* جلوگیری از جابه‌جایی کل صفحه هنگام کشیدن ردیف‌های افقی —
+   * فقط خودِ ردیف اسکرول می‌شود (درخواست کاربر) */
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
@@ -804,6 +808,78 @@ a:hover {
   gap: 0.2rem;
 }
 
+/* ---------- ردیف افقی قابل کشیدن صفحه اصلی ----------
+ * فقط خودِ ردیف اسکرول می‌شود (نه کل صفحه)؛ در موبایل با لمس،
+ * در دسکتاپ با کشیدن موس. نوار اسکرول پنهان اما دسترس‌پذیر است. */
+.hscroll {
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 0.35rem 0.15rem 0.55rem;
+  margin-inline: -0.15rem;
+  cursor: grab;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* جلوگیری از انتخاب متن/دراگ بومی هنگام کشیدن با موس */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hscroll::-webkit-scrollbar {
+  display: none;
+}
+
+.hscroll.dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  user-select: none;
+}
+
+.hscroll.dragging a {
+  pointer-events: none;
+}
+
+.hscroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.hscroll > * {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.hscroll .hcell-book {
+  width: 152px;
+}
+
+.hscroll .hcell-book .book-card {
+  height: 100%;
+  margin: 0;
+}
+
+.hscroll .hcell-resume {
+  width: min(320px, 82vw);
+}
+
+.hscroll .hcell-resume .resume-card {
+  height: 100%;
+}
+
+@media (max-width: 480px) {
+  .hscroll .hcell-book {
+    width: 130px;
+  }
+
+  .hscroll .hcell-resume {
+    width: min(300px, 86vw);
+  }
+}
+
 /* ---------- هیرو صفحه اصلی ---------- */
 .hero {
   position: relative;
@@ -961,6 +1037,24 @@ a:hover {
   flex-wrap: wrap;
   gap: 0.45rem;
   margin-bottom: 1.4rem;
+}
+
+/* ردیف ژانرها در صفحه اصلی — به‌صورت نواری افقی (فقط همین بخش اسکرول می‌شود) */
+.chip-row.nowrap {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-bottom: 0.35rem;
+}
+
+.chip-row.nowrap::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-row.nowrap .chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* ---------- صفحه جزئیات ناول ---------- */
@@ -1549,8 +1643,7 @@ a:hover {
 .chapter-popup .tbtn:focus-visible,
 .chapter-popup .cp-list :focus-visible,
 .chapter-popup .cp-search input:focus-visible,
-.reader-panel .panel-content :focus-visible,
-.reader-hint:focus-visible {
+.reader-panel .panel-content :focus-visible {
   outline: 2px solid var(--reader-accent);
   outline-offset: 2px;
   border-radius: 12px;
@@ -2098,19 +2191,35 @@ a:hover {
 }
 
 /* صفحات بارگذاری و اعلان کش کتاب‌خوان */
-.reader-hint {
+/* راهنمای یک‌باره «لمس وسط صفحه» — غیرتعاملی (pointer-events: none) تا هرگز روی لمس‌ها نیفتد */
+.tap-hint {
   position: absolute;
-  bottom: 64px;
-  inset-inline-start: 50%;
-  transform: translateX(50%);
+  bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
   background: var(--reader-chrome);
   border: 1px solid var(--reader-border);
-  color: var(--reader-fg);
-  padding: 0.45rem 0.9rem;
+  color: var(--reader-muted);
+  padding: 0.45rem 1rem;
   border-radius: 999px;
-  font-size: 0.8rem;
-  z-index: 25;
-  animation: fadeIn 0.2s ease;
+  font-size: 0.78rem;
+  z-index: 20;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100vw - 2rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--reader-shadow, 0 6px 24px rgba(0, 0, 0, 0.35));
+  animation: fadeIn 0.35s ease;
+}
+
+@media (max-width: 520px) {
+  .tap-hint {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.6;
+    border-radius: 14px;
+  }
 }
 
 /* ---------- صفحه راهنما و درباره ---------- */
@@ -2121,6 +2230,84 @@ a:hover {
   border: 1px solid var(--border-soft);
   border-radius: 20px;
   padding: 1.8rem 2rem;
+}
+
+/* جعبه هدف/مأموریت در صفحه درباره */
+.mission-box {
+  border-inline-start: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 0.9rem 1.1rem;
+  margin: 0.4rem 0 0.4rem;
+}
+
+.mission-box p {
+  margin: 0 0 0.55rem;
+}
+
+.mission-box p:last-child {
+  margin-bottom: 0;
+}
+
+/* کارت کانال تلگرام در صفحه درباره */
+.tg-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  border: 1px solid color-mix(in srgb, #229ed9 45%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, #229ed9 14%, transparent), color-mix(in srgb, #229ed9 4%, transparent));
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  margin-block: 0.6rem;
+}
+
+.tg-card .tg-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #229ed9;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px color-mix(in srgb, #229ed9 35%, transparent);
+}
+
+.tg-card .tg-body {
+  flex: 1;
+  min-width: 220px;
+}
+
+.tg-card .tg-body strong {
+  display: inline-block;
+  font-size: 1.02rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.tg-card .tg-body p {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+}
+
+.tg-card .tg-join {
+  margin-inline-start: auto;
+  background: #229ed9;
+  border-color: #229ed9;
+}
+
+.tg-card .tg-join:hover {
+  background: #1c86b8;
+  border-color: #1c86b8;
+}
+
+@media (max-width: 560px) {
+  .tg-card .tg-join {
+    margin-inline-start: 0;
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .prose-page h1 {

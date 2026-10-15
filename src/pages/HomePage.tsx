@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BookOpen,
+  ChevronLeft,
   Clock3,
   Compass,
   Heart,
@@ -15,22 +16,122 @@ import {
 import { useCatalog } from '@/hooks/useCatalog';
 import { usePersonalData } from '@/hooks/usePersonalData';
 import { collectGenres, displayTitle } from '@/services/catalog';
-import { BookGrid, BookCard } from '@/components/BookCard';
+import { BookCard } from '@/components/BookCard';
 import { BookGridSkeleton, EmptyBox, ErrorBox } from '@/components/StateBoxes';
 import { CoverImage } from '@/components/CoverImage';
 import { useDocumentTitle } from '@/hooks/misc';
 import { SITE_NAME } from '@/config';
+import type { Novel } from '@/types';
 
-/** یک ردیف از کارت‌های کتاب با عنوان سکشن */
+/** سقف آیتم‌های هر ردیف صفحه اصلی — بیشتر از این، دکمه «بیشتر» نمایش داده می‌شود */
+const ROW_LIMIT = 10;
+
+/**
+ * ردیف افقی قابل کشیدن — فقط همین بخش اسکرول می‌شود، نه کل صفحه.
+ * موبایل: اسکرول لمسی بومی + snap | دسکتاپ: درگ با موس.
+ * با کلید جهت‌نما هم قابل حرکت است (دسترس‌پذیری).
+ */
+function HRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let down: { x: number; left: number } | null = null;
+    let moved = false;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      down = { x: e.clientX, left: el.scrollLeft };
+      moved = false;
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!down) return;
+      const dx = e.clientX - down.x;
+      if (!moved && Math.abs(dx) > 5) {
+        moved = true;
+        el.classList.add('dragging');
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (moved) {
+        el.scrollLeft = down.left - dx;
+        e.preventDefault();
+      }
+    };
+    const onUp = () => {
+      down = null;
+      el.classList.remove('dragging');
+    };
+    // پس از درگ، کلیکِ رها‌شدن روی کارت‌ها نباید لینک را باز کند
+    const onClickCapture = (e: MouseEvent) => {
+      if (moved) {
+        e.preventDefault();
+        e.stopPropagation();
+        moved = false;
+      }
+    };
+    // دراگ بومی لینک/تصویر کارت‌ها رقابت دراگ اسکرول را خراب می‌کند (pointercancel) → خنثی
+    const onDragStart = (e: Event) => {
+      e.preventDefault();
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('pointerleave', onUp);
+    el.addEventListener('click', onClickCapture, true);
+    el.addEventListener('dragstart', onDragStart);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('pointerleave', onUp);
+      el.removeEventListener('click', onClickCapture, true);
+      el.removeEventListener('dragstart', onDragStart);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className="hscroll"
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        const el = ref.current;
+        if (!el) return;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          // صفحه RTL است: فلش راست → حرکت به ابتدای ردیف (راست)
+          const amount = Math.round(el.clientWidth * 0.85);
+          el.scrollBy({ left: e.key === 'ArrowRight' ? -amount : amount, behavior: 'smooth' });
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** یک سکشن صفحه اصلی با عنوان و لینک «بیشتر» (وقتی آیتم‌ها از سقف بیشتر باشند) */
 function Section({
   title,
   icon,
   moreTo,
+  more,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   moreTo?: string;
+  more?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -40,9 +141,10 @@ function Section({
           {icon}
           {title}
         </h2>
-        {moreTo && (
+        {moreTo && more && (
           <Link className="more" to={moreTo}>
-            مشاهده همه ←
+            بیشتر
+            <ChevronLeft size={15} aria-hidden="true" />
           </Link>
         )}
       </div>
@@ -51,16 +153,24 @@ function Section({
   );
 }
 
+/** سلول ردیف افقی برای کارت کتاب */
+function BookCell({ novel, favorite }: { novel: Novel; favorite?: boolean }) {
+  return (
+    <div className="hcell hcell-book">
+      <BookCard novel={novel} favorite={favorite} />
+    </div>
+  );
+}
+
 function ContinueReading() {
   const { novels, status } = useCatalog();
   const { progress, ready } = usePersonalData();
 
-  const items = useMemo(() => {
+  const { items, hasMore } = useMemo(() => {
     const entries = [...progress.values()]
       .filter((p) => p.percentage < 0.999)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 6);
-    return entries
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const mapped = entries
       .map((p) => {
         const novel = novels.find((n) => n.id === p.bookId);
         const volume = novel?.volumes.find((v) => v.id === p.volumeId);
@@ -68,38 +178,37 @@ function ContinueReading() {
         return { p, novel, volume };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
+    return { items: mapped.slice(0, ROW_LIMIT), hasMore: mapped.length > ROW_LIMIT };
   }, [progress, novels]);
 
   if (!ready || status === 'loading') return null;
   if (items.length === 0) return null;
 
   return (
-    <Section title="ادامه مطالعه" icon={<Clock3 size={19} />}>
-      <div className="resume-list">
+    <Section title="ادامه مطالعه" icon={<Clock3 size={19} />} moreTo="/history" more={hasMore}>
+      <HRow label="ادامه مطالعه">
         {items.map(({ p, novel, volume }) => (
-          <Link
-            key={`${p.bookId}::${p.volumeId}`}
-            className="resume-card"
-            to={`/read/${novel.id}/${volume.id}`}
-          >
-            <div className="cover-thumb">
-              <CoverImage src={novel.cover} alt={displayTitle(novel)} />
-            </div>
-            <div className="info">
-              <span className="t">{displayTitle(novel)}</span>
-              <span className="s">
-                {volume.title}؛ {p.chapterTitle || 'فصل جاری'}
-              </span>
-              <span className="p card-progress">
-                <span className="progress-track">
-                  <span className="progress-fill" style={{ width: `${Math.round(p.percentage * 100)}%` }} />
+          <div className="hcell hcell-resume" key={`${p.bookId}::${p.volumeId}`}>
+            <Link className="resume-card" to={`/read/${novel.id}/${volume.id}`}>
+              <div className="cover-thumb">
+                <CoverImage src={novel.cover} alt={displayTitle(novel)} />
+              </div>
+              <div className="info">
+                <span className="t">{displayTitle(novel)}</span>
+                <span className="s">
+                  {volume.title}؛ {p.chapterTitle || 'فصل جاری'}
                 </span>
-                <span className="progress-label">{Math.round(p.percentage * 100)}٪ خوانده‌شده</span>
-              </span>
-            </div>
-          </Link>
+                <span className="p card-progress">
+                  <span className="progress-track">
+                    <span className="progress-fill" style={{ width: `${Math.round(p.percentage * 100)}%` }} />
+                  </span>
+                  <span className="progress-label">{Math.round(p.percentage * 100)}٪ خوانده‌شده</span>
+                </span>
+              </div>
+            </Link>
+          </div>
         ))}
-      </div>
+      </HRow>
     </Section>
   );
 }
@@ -127,14 +236,12 @@ export default function HomePage() {
     }
   }, [showWelcome]);
 
-  const recent = useMemo(() => [...novels].slice(0, 8), [novels]);
-  const completed = useMemo(() => novels.filter((n) => n.status === 'completed').slice(0, 8), [novels]);
-  const ongoing = useMemo(() => novels.filter((n) => n.status === 'ongoing').slice(0, 8), [novels]);
+  /* فهرست کامل هر سکشن — ردیف افقی تا سقف ROW_LIMIT نشان می‌دهد و مابقی با «بیشتر» */
+  const recent = useMemo(() => [...novels].sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? '')), [novels]);
+  const completed = useMemo(() => novels.filter((n) => n.status === 'completed'), [novels]);
+  const ongoing = useMemo(() => novels.filter((n) => n.status === 'ongoing'), [novels]);
   const genres = useMemo(() => collectGenres(novels).slice(0, 12), [novels]);
-  const favoriteNovels = useMemo(
-    () => novels.filter((n) => favorites.has(n.id)).slice(0, 8),
-    [novels, favorites],
-  );
+  const favoriteNovels = useMemo(() => novels.filter((n) => favorites.has(n.id)), [novels, favorites]);
 
   if (status === 'loading') {
     return (
@@ -211,35 +318,62 @@ export default function HomePage() {
         <>
           <ContinueReading />
 
-          <Section title="تازه‌ترین کتاب‌ها" icon={<BookOpen size={19} />} moreTo="/library">
-            <BookGrid novels={recent} favorites={ready ? favorites : undefined} />
+          <Section title="تازه‌ترین کتاب‌ها" icon={<BookOpen size={19} />} moreTo="/library" more={recent.length > ROW_LIMIT}>
+            <HRow label="تازه‌ترین کتاب‌ها">
+              {recent.slice(0, ROW_LIMIT).map((n) => (
+                <BookCell key={n.id} novel={n} favorite={ready ? favorites.has(n.id) : undefined} />
+              ))}
+            </HRow>
           </Section>
 
           {ongoing.length > 0 && (
-            <Section title="در حال انتشار" icon={<Play size={19} />} moreTo="/library">
-              <div className="book-grid">
-                {ongoing.map((n) => (
-                  <BookCard key={n.id} novel={n} favorite={ready ? favorites.has(n.id) : undefined} />
+            <Section
+              title="در حال انتشار"
+              icon={<Play size={19} />}
+              moreTo="/library?status=ongoing"
+              more={ongoing.length > ROW_LIMIT}
+            >
+              <HRow label="در حال انتشار">
+                {ongoing.slice(0, ROW_LIMIT).map((n) => (
+                  <BookCell key={n.id} novel={n} favorite={ready ? favorites.has(n.id) : undefined} />
                 ))}
-              </div>
+              </HRow>
             </Section>
           )}
 
           {completed.length > 0 && (
-            <Section title="کتاب‌های کامل‌شده" icon={<Trophy size={19} />} moreTo="/library">
-              <BookGrid novels={completed} favorites={ready ? favorites : undefined} />
+            <Section
+              title="کتاب‌های کامل‌شده"
+              icon={<Trophy size={19} />}
+              moreTo="/library?status=completed"
+              more={completed.length > ROW_LIMIT}
+            >
+              <HRow label="کتاب‌های کامل‌شده">
+                {completed.slice(0, ROW_LIMIT).map((n) => (
+                  <BookCell key={n.id} novel={n} favorite={ready ? favorites.has(n.id) : undefined} />
+                ))}
+              </HRow>
             </Section>
           )}
 
           {favoriteNovels.length > 0 && (
-            <Section title="علاقه‌مندی‌های شما" icon={<Heart size={19} />} moreTo="/favorites">
-              <BookGrid novels={favoriteNovels} favorites={favorites} />
+            <Section
+              title="علاقه‌مندی‌های شما"
+              icon={<Heart size={19} />}
+              moreTo="/favorites"
+              more={favoriteNovels.length > ROW_LIMIT}
+            >
+              <HRow label="علاقه‌مندی‌های شما">
+                {favoriteNovels.slice(0, ROW_LIMIT).map((n) => (
+                  <BookCell key={n.id} novel={n} favorite />
+                ))}
+              </HRow>
             </Section>
           )}
 
           {genres.length > 0 && (
             <Section title="ژانرها" icon={<Tags size={19} />}>
-              <div className="chip-row">
+              <div className="chip-row nowrap" role="region" aria-label="ژانرها">
                 {genres.map((g) => (
                   <Link key={g.name} to={`/library?genre=${encodeURIComponent(g.name)}`} className="chip clickable" style={{ textDecoration: 'none' }}>
                     {g.name}

@@ -1,8 +1,8 @@
 {
-  "name": "novelshelf",
+  "name": "novel-library",
   "private": true,
-  "version": "1.0.0",
-  "description": "کتاب‌خوان آنلاین ناول و EPUB — کتابخانه‌ای رایگان و استاتیک برای Light Novel و Web Novel با رابط فارسی",
+  "version": "1.4.0",
+  "description": "روایت بی‌پایان (Novel Library) — کتاب‌خوان آنلاین ناول و EPUB؛ کتابخانه‌ای رایگان و استاتیک با رابط فارسی",
   "type": "module",
   "engines": {
     "node": ">=20"

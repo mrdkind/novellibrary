@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { BookOpen, Clock, Home, Library, Menu, Moon, Search, Settings, Heart, Sun } from 'lucide-react';
+import { BookOpen, Clock, Home, Library, Menu, Moon, Search, Settings, Heart, Send, Sun } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
-import { SITE_NAME, SITE_TAGLINE, REPO_URL } from '@/config';
+import { SITE_NAME, SITE_NAME_EN, SITE_TAGLINE, REPO_URL, TELEGRAM_URL } from '@/config';
 import { useTheme } from '@/hooks/useTheme';
 import { useDebounced } from '@/hooks/misc';
 import { useEffect } from 'react';
@@ -45,13 +45,15 @@ function Header() {
   return (
     <header className="site-header">
       <div className="container header-inner">
-        <Link to="/" className="brand" aria-label={`${SITE_NAME} — صفحه اصلی`}>
+        <Link to="/" className="brand" aria-label={`${SITE_NAME} (${SITE_NAME_EN}) — صفحه اصلی`} title={`${SITE_NAME} | ${SITE_NAME_EN}`}>
           <span className="logo" aria-hidden="true">
             <BookOpen size={21} strokeWidth={2.2} />
           </span>
           <span>
             {SITE_NAME}
-            <small>{SITE_TAGLINE}</small>
+            <small>
+              {SITE_NAME_EN} — {SITE_TAGLINE}
+            </small>
           </span>
         </Link>
 
@@ -135,6 +137,9 @@ function Footer() {
           <Link to="/guide">راهنمای استفاده</Link>
           <Link to="/about">درباره پروژه</Link>
           <Link to="/settings">تنظیمات و داده‌ها</Link>
+          <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+            <Send size={13} /> کانال تلگرام
+          </a>
           {REPO_URL && (
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
               مخزن GitHub

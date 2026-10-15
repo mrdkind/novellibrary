@@ -207,7 +207,7 @@ function coverSvg({ titleFa, titleEn, author, palette }) {
     <text x="300" y="395" font-family="Georgia, serif" font-size="30" font-style="italic" text-anchor="middle">${esc(titleEn)}</text>
     <text x="300" y="470" font-family="serif" font-size="56" text-anchor="middle">❦</text>
     <text x="300" y="760" font-family="Tahoma, sans-serif" font-size="30" text-anchor="middle" direction="rtl">${esc(author)}</text>
-    <text x="300" y="810" font-family="Tahoma, sans-serif" font-size="20" fill="rgba(255,255,255,0.75)" text-anchor="middle" direction="rtl">نسخهٔ نمونهٔ کتاب‌خوان NovelShelf</text>
+    <text x="300" y="810" font-family="Tahoma, sans-serif" font-size="20" fill="rgba(255,255,255,0.75)" text-anchor="middle" direction="rtl">نسخهٔ نمونهٔ کتاب‌خوان روایت بی‌پایان</text>
   </g>
 </svg>
 `;
@@ -324,7 +324,7 @@ async function makeAlice() {
       language: 'en',
       dir: 'ltr',
       bodyHtml:
-        `  <p class="centered"><em>An illustrated sample edition for the NovelShelf reader.</em></p>\n` +
+        `  <p class="centered"><em>An illustrated sample edition for the Novel Library reader.</em></p>\n` +
         `  <figure><img src="../images/ornament-${i % 2 === 0 ? 'a' : 'b'}.svg" alt="decorative illustration"/><figcaption>An ornamental illustration inside the chapter.</figcaption></figure>\n` +
         c.paras.map((p) => `  <p>${esc(p)}</p>`).join('\n') +
         extra,
@@ -405,7 +405,7 @@ const GOLESTAN_CHAPTERS = [
   {
     title: 'دیباچه؛ به نام خدایی که جان آفرید',
     paras: [
-      `این کتاب، «گزیده‌ای آموزشی» از قطعه‌های مشهور گلستان سعدی است که برای نمایش قابلیت‌های کتاب‌خوان فارسی NovelShelf (راست‌به‌چپ، تایپوگرافی، تصاویر و فهرست مطالب) گردآوری شده است. متن‌ها مالکیت عمومی‌اند.`,
+      `این کتاب، «گزیده‌ای آموزشی» از قطعه‌های مشهور گلستان سعدی است که برای نمایش قابلیت‌های کتاب‌خوان فارسی روایت بی‌پایان (راست‌به‌چپ، تایپوگرافی، تصاویر و فهرست مطالب) گردآوری شده است. متن‌ها مالکیت عمومی‌اند.`,
       'گلستان کتابی است منظوم و منثور که سعدی شیرازی در سدهٔ هفتم هجری آن را نگاشت و از پرخواننده‌ترین کتاب‌های ادب فارسی در جهان است.',
       'در آغاز کتاب، سعدی با سرودن این بیت‌ها خدا را می‌ستاید:',
     ],
@@ -463,7 +463,7 @@ const GOLESTAN_CHAPTERS = [
   {
     title: 'پایان‌بخش؛ دربارهٔ این گزیده',
     paras: [
-      'این گزیده تنها برای نمایش کتاب‌خوان NovelShelf آماده شده است؛ پاراگراف‌های معرفی «مدرن» نوشتهٔ گردآورندهٔ این نسخهٔ نمونه‌اند و اشعار، نقل مستقیم از متن مالکیت عمومی گلستان‌اند.',
+      'این گزیده تنها برای نمایش کتاب‌خوان روایت بی‌پایان آماده شده است؛ پاراگراف‌های معرفی «مدرن» نوشتهٔ گردآورندهٔ این نسخهٔ نمونه‌اند و اشعار، نقل مستقیم از متن مالکیت عمومی گلستان‌اند.',
       'می‌توانید این کتاب نمونه را با حذف پوشهٔ «novels/golestan-saadi/» از کتابخانهٔ خود بردارید. روش انجام این کار در README توضیح داده شده است.',
       'مطالعهٔ خوش بگذرانید! ❦',
     ],
@@ -534,7 +534,7 @@ async function makeGolestan() {
       author: 'سعدی شیرازی',
       translator: null,
       description:
-        'گزیده‌ای آموزشی از قطعه‌های مشهور گلستان سعدی؛ از «بنی‌آدم اعضای یکدیگرند» تا بیت‌های باب‌های عشق و سخن؛ همراه با معرفی کوتاه هر بخش. این نسخهٔ نمونه برای نمایش تایپوگرافی فارسی، چیدمان راست‌به‌چپ و فهرست مطالب در کتاب‌خوان NovelShelf ساخته شده است.',
+        'گزیده‌ای آموزشی از قطعه‌های مشهور گلستان سعدی؛ از «بنی‌آدم اعضای یکدیگرند» تا بیت‌های باب‌های عشق و سخن؛ همراه با معرفی کوتاه هر بخش. این نسخهٔ نمونه برای نمایش تایپوگرافی فارسی، چیدمان راست‌به‌چپ و فهرست مطالب در کتاب‌خوان روایت بی‌پایان ساخته شده است.',
       genres: ['ادبیات کلاسیک', 'شعر فارسی', 'حکمت'],
       language: 'fa',
       direction: 'rtl',

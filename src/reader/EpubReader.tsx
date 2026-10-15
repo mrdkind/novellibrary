@@ -175,7 +175,12 @@ export default function EpubReader(props: EpubReaderProps) {
   const [currentChapter, setCurrentChapter] = useState('');
   const [toc, setToc] = useState<FlatTocItem[]>([]);
   const [panel, setPanel] = useState<'none' | 'chapters' | 'settings' | 'bookmarks'>('none');
+  /* کنترل‌ها به‌صورت پیش‌فرض مخفی‌اند تا روی متن نیفتند؛
+   * لمس/کلیک روی وسط صفحه نمایش/مخفی‌کردن می‌کند (طبق درخواست کاربر).
+   * ترجیح «showToolbar» فقط تعیین می‌کند هنگام ورود چه وضعیتی باشد. */
   const [chromeVisible, setChromeVisible] = useState(settings.showToolbar);
+  /* راهنمای یک‌باره «لمس وسط صفحه» — پس از بار اول دیگر نمایش داده نمی‌شود */
+  const [tapHint, setTapHint] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -193,6 +198,8 @@ export default function EpubReader(props: EpubReaderProps) {
     () => effectiveDirection(settings, volume.language ?? novel.language),
     [settings.direction, volume.language, novel.language],
   );
+  /** ترجیح نمایش کنترل‌ها هنگام ورود — برای تشخیص تغییر واقعی تنظیم */
+  const showToolbarPrefRef = useRef(settings.showToolbar);
   /** جهت مؤثر برای استفاده در callbackها بدون وابستگی بازسازی */
   const directionRef = useRef(direction);
   directionRef.current = direction;
@@ -214,6 +221,27 @@ export default function EpubReader(props: EpubReaderProps) {
   /** آینه panel برای استفاده در callbackهای بدون وابستگی */
   const panelRef = useRef(panel);
   panelRef.current = panel;
+
+  /* ---------- نمایش/مخفی‌کردن کنترل‌ها با لمس وسط صفحه ---------- */
+  const toggleChrome = useCallback(() => {
+    setChromeVisible((v) => !v);
+  }, []);
+  /** آینه toggleChrome برای استفاده در listener سند iframe (بدون وابستگی) */
+  const chromeToggleRef = useRef(toggleChrome);
+  chromeToggleRef.current = toggleChrome;
+
+  /** تشخیص لمس/کلیک متنی روی سند کتاب (وسط صفحه) — نمایش/مخفی‌کردن کنترل‌ها.
+   * دابل‌کلیک (انتخاب کلمه) و کشیدن برای انتخاب متن توگل نمی‌کنند. */
+  const handleDocTap = useCallback((ev: MouseEvent, doc: Document) => {
+    try {
+      if (ev.detail > 1) return; // دابل‌کلیک دسکتاپ
+      const sel = doc.getSelection?.();
+      if (sel && !sel.isCollapsed && String(sel).trim().length > 0) return; // انتخاب متن در جریان است
+      chromeToggleRef.current();
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   /* ---------- اعمال تنظیمات ظاهری روی rendition ----------
    * epub.js هوک inject خودش تم‌های سریال‌شده (رشته CSS) را نادیده می‌گیرد؛
@@ -397,8 +425,15 @@ export default function EpubReader(props: EpubReaderProps) {
                 return;
               }
 
+              // لمس/کلیک روی خودِ نوار ناوبری تزریق‌شده (فضای خالی اطراف دکمه‌ها) توگل نکند
+              if (target.closest('.ns-ch-nav')) return;
+
               const anchor = target.closest('a') as HTMLAnchorElement | null;
-              if (!anchor || !anchor.getAttribute('href')) return;
+              if (!anchor || !anchor.getAttribute('href')) {
+                // کلیک روی متن ساده کتاب (وسط صفحه) → نمایش/مخفی‌کردن کنترل‌ها
+                handleDocTap(ev, doc);
+                return;
+              }
               ev.preventDefault();
               ev.stopPropagation();
               const raw = anchor.getAttribute('href') ?? '';
@@ -576,7 +611,12 @@ export default function EpubReader(props: EpubReaderProps) {
   }, [settings, applyVisuals]);
 
   useEffect(() => {
-    setChromeVisible(settings.showToolbar);
+    /* فقط وقتی کاربر خودش ترجیح را تغییر داده sync شود — نه در بارگذاری اولیه؛
+     * وگرنه هر تغییر دیگر تنظیمات، وضعیت دستی کنترل‌ها را بازنویسی می‌کند */
+    if (settings.showToolbar !== showToolbarPrefRef.current) {
+      showToolbarPrefRef.current = settings.showToolbar;
+      setChromeVisible(settings.showToolbar);
+    }
   }, [settings.showToolbar]);
 
   /* ---------- ذخیره پیشرفت (debounce + flush) ---------- */
@@ -950,6 +990,38 @@ export default function EpubReader(props: EpubReaderProps) {
     [settings.theme, settings.textColor, settings.bgColor, settings.bgImageOpacity],
   );
 
+  /** کلیک روی فضای خالی ظرف کتاب (بیرون iframe — مثل حاشیه‌ها) توگل کنترل‌ها */
+  const onContainerTap = useCallback(
+    (e: React.MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('button, a, input, [role="button"]')) return;
+      toggleChrome();
+    },
+    [toggleChrome],
+  );
+
+  /* راهنمای یک‌باره لمس وسط صفحه — فقط بار اول (localStorage) */
+  useEffect(() => {
+    if (status !== 'ready') return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem('ns-taphint-seen') === '1';
+    } catch {
+      seen = false;
+    }
+    if (seen) return;
+    setTapHint(true);
+    const t = setTimeout(() => {
+      setTapHint(false);
+      try {
+        localStorage.setItem('ns-taphint-seen', '1');
+      } catch {
+        /* ignore */
+      }
+    }, 5200);
+    return () => clearTimeout(t);
+  }, [status]);
+
   /** اندیس فصل جاری در فهرست مطالب.
    * فالبک: در صفحات خارج از فهرست (جلد/عنوان)، نزدیک‌ترین فصلِ بعدی نشان داده می‌شود
    * تا «فصلی که در جریانش هستیم» دقیقاً هایلایت شود. */
@@ -1066,6 +1138,7 @@ export default function EpubReader(props: EpubReaderProps) {
           ref={scrollContainerRef}
           className={`reader-container ${isScrolled ? 'scrolled' : ''}`}
           style={isScrolled ? { paddingBlock: '1rem' } : undefined}
+          onClick={onContainerTap}
         >
           <div
             ref={hostRef}
@@ -1188,11 +1261,11 @@ export default function EpubReader(props: EpubReaderProps) {
         </div>
       )}
 
-      {/* راهنمای مخفی‌کردن کنترل‌ها */}
-      {status === 'ready' && !chromeVisible && (
-        <button type="button" className="reader-hint" onClick={() => setChromeVisible(true)}>
-          نمایش کنترل‌ها (H)
-        </button>
+      {/* راهنمای یک‌باره لمس وسط صفحه — غیرتعاملی و بدون مزاحمت برای لمس‌ها */}
+      {status === 'ready' && tapHint && !chromeVisible && (
+        <div className="tap-hint" role="status">
+          برای نمایش یا مخفی‌کردن کنترل‌ها، وسط صفحه را لمس کنید
+        </div>
       )}
 
       {/* ---------- پاپ‌آپ فهرست فصل‌ها (پنجره وسط صفحه، مناسب موبایل و دسکتاپ) ---------- */}
