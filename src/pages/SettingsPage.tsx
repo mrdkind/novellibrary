@@ -633,7 +633,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="setting-row">
+        <div className="setting-row danger-row">
           <div>
             <div className="label">پاک‌کردن داده‌ها</div>
             <div className="hint">حذف تاریخچه یا کل داده‌های شخصی از مرورگر.</div>

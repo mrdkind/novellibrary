@@ -10,11 +10,21 @@ export function LoadingBox({ label = 'در حال بارگذاری…' }: { labe
   );
 }
 
-export function EmptyBox({ title, message, action }: { title: string; message: string; action?: ReactNode }) {
+export function EmptyBox({
+  title,
+  message,
+  action,
+  icon,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+  icon?: ReactNode;
+}) {
   return (
     <div className="state-box">
       <div className="ico" aria-hidden="true">
-        <SearchX size={30} />
+        {icon ?? <SearchX size={30} />}
       </div>
       <h3>{title}</h3>
       <p>{message}</p>
@@ -51,8 +61,24 @@ export function ErrorBox({
   );
 }
 
-/** اسکلت گرید کتاب‌ها هنگام بارگذاری کاتالوگ */
-export function BookGridSkeleton({ count = 8 }: { count?: number }) {
+/** اسکلت گرید/فهرست کتاب‌ها هنگام بارگذاری کاتالوگ */
+export function BookGridSkeleton({ count = 8, view = 'grid' }: { count?: number; view?: 'grid' | 'list' }) {
+  if (view === 'list') {
+    return (
+      <div className="book-rows" aria-hidden="true">
+        {Array.from({ length: count }, (_, i) => (
+          <div key={i} className="book-row">
+            <div className="skeleton" style={{ width: 52, aspectRatio: '2/3', borderRadius: 8 }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={{ height: 14, width: '55%', borderRadius: 8 }} />
+              <div className="skeleton" style={{ height: 11, marginTop: 8, width: '38%', borderRadius: 8 }} />
+              <div className="skeleton" style={{ height: 11, marginTop: 8, width: '45%', borderRadius: 8 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="book-grid" aria-hidden="true">
       {Array.from({ length: count }, (_, i) => (
