@@ -1,10 +1,14 @@
-import { useState } from 'react';
-import { BookOpen, Clock, Home, Library, Menu, Moon, Search, Settings, Heart, Send, Sun } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { BookOpen, Clock, Home, Library, Menu, MonitorSmartphone, Moon, Search, Settings, Heart, Send, Sun } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { SITE_NAME, SITE_NAME_EN, SITE_TAGLINE, REPO_URL, TELEGRAM_URL } from '@/config';
-import { useTheme } from '@/hooks/useTheme';
+import { useTheme, type Theme } from '@/hooks/useTheme';
+import { useCatalog } from '@/hooks/useCatalog';
 import { useDebounced } from '@/hooks/misc';
 import { useEffect } from 'react';
+
+/** چرخه تم سایت — تاریک → روشن → سیستم (افق میان‌مدت گزارش) */
+const THEME_NEXT: Record<Theme, Theme> = { dark: 'light', light: 'system', system: 'dark' };
 
 const NAV_ITEMS = [
   { to: '/', label: 'خانه', icon: Home, end: true },
@@ -23,7 +27,7 @@ const BOTTOM_NAV_ITEMS = [
 ];
 
 function Header() {
-  const { theme, toggle } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query, 350);
   const navigate = useNavigate();
@@ -82,14 +86,17 @@ function Header() {
               <Search size={16} />
             </span>
           </div>
+          {/* تم سایت — چرخه سه‌حالته: تاریک → روشن → سیستم (پیش‌فرض تم تاریک می‌ماند) */}
           <button
             type="button"
             className="icon-btn"
-            onClick={toggle}
-            aria-label={theme === 'dark' ? 'تغییر به تم روشن' : 'تغییر به تم تاریک'}
-            title={theme === 'dark' ? 'تم روشن' : 'تم تاریک'}
+            onClick={() => setTheme(THEME_NEXT[theme])}
+            aria-label={
+              theme === 'dark' ? 'تغییر به تم روشن' : theme === 'light' ? 'تغییر به تم سیستم (خودکار)' : 'تغییر به تم تاریک'
+            }
+            title={theme === 'dark' ? 'تم تاریک' : theme === 'light' ? 'تم روشن' : 'تم سیستم'}
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === 'dark' ? <Sun size={18} /> : theme === 'light' ? <Moon size={18} /> : <MonitorSmartphone size={18} />}
           </button>
           <button
             type="button"
@@ -125,6 +132,16 @@ function BottomNav() {
 }
 
 function Footer() {
+  /* افق میان‌مدت گزارش — شفافیت تازگی کاتالوگ: نمایش زمان آخرین Build کاتالوگ */
+  const { catalog } = useCatalog();
+  const freshness = useMemo(() => {
+    const raw = catalog?.generatedAt;
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
+  }, [catalog]);
+
   return (
     <footer className="site-footer">
       <div className="container footer-grid">
@@ -134,8 +151,15 @@ function Footer() {
             کتابخانه‌ای رایگان برای مطالعه آنلاین ناول و فایل‌های EPUB. تمام تنظیمات، نشانک‌ها و پیشرفت مطالعه شما فقط
             در مرورگر خودتان ذخیره می‌شود و به هیچ سروری ارسال نمی‌گردد.
           </p>
+          {freshness && (
+            <p className="footer-freshness" title="زمان ساخت آخرین نسخه فهرست کتاب‌ها">
+              آخرین به‌روزرسانی کتابخانه: {freshness}
+            </p>
+          )}
         </div>
-        <div className="footer-links" aria-label="پیوندها">
+        {/* F-06 — لینک‌های فوتر از div به nav تغییر کرد تا نقش معنایی داشته باشند
+         * (axe: aria-prohibited-attr — aria-label روی div نقش ندارد) */}
+        <nav className="footer-links" aria-label="پیوندها">
           <Link to="/library">کتابخانه</Link>
           <Link to="/guide">راهنمای استفاده</Link>
           <Link to="/about">درباره پروژه</Link>
@@ -148,10 +172,10 @@ function Footer() {
               مخزن GitHub
             </a>
           )}
-        </div>
+        </nav>
         <div>
           <p style={{ margin: 0 }}>
-            حقوق نشر کتاب‌ها نزد ناشران و مولفان آن‌هاست؛ این سایت فقط کتاب‌هایی با مجوز انتشار عمومی را میزبانی می‌کند.
+            حقوق نشر کتاب‌ها نزد ناشران و مؤلفان آن‌هاست؛ این سایت فقط کتاب‌هایی با مجوز انتشار عمومی را میزبانی می‌کند.
           </p>
         </div>
       </div>

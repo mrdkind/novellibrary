@@ -454,6 +454,13 @@ a:hover {
   color: var(--accent);
 }
 
+/* تازگی کاتالوگ در فوتر (افق میان‌مدت گزارش ممیزی) — زمان generatedAt کاتالوگ */
+.footer-freshness {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 /* ---------- دکمه‌ها ----------
  * مقیاس واحد: پیش‌فرض ۴۲px، کوچک ۳۶px، روی لمسی ۴۴px (پایین فایل) */
 .btn {

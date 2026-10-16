@@ -5,6 +5,7 @@ import {
   DownloadCloud,
   Eraser,
   ImagePlus,
+  MonitorSmartphone,
   Moon,
   Palette,
   RotateCcw,
@@ -235,8 +236,8 @@ export default function SettingsPage() {
           </div>
           <div className="control">
             <button type="button" className="btn small" onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-              {theme === 'dark' ? 'تغییر به روشن' : 'تغییر به تاریک'}
+              {theme === 'dark' ? <Sun size={14} /> : theme === 'light' ? <Moon size={14} /> : <MonitorSmartphone size={14} />}
+              {theme === 'dark' ? 'تغییر به روشن' : theme === 'light' ? 'تغییر به تم سیستم' : 'تغییر به تاریک'}
             </button>
           </div>
         </div>

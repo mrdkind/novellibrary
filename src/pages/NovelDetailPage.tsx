@@ -123,8 +123,10 @@ export default function NovelDetailPage() {
 
   return (
     <div>
+      {/* F-04 — فلش بازگشت راست‌نما (هم‌سو با کتاب‌خوان و عرف iOS در RTL)؛
+       * آینه‌سازی قبلی دو قرارداد بصری متفاوت می‌ساخت */}
       <button type="button" className="btn ghost small" onClick={() => navigate(-1)} style={{ marginBottom: '1rem' }}>
-        <ArrowRight size={16} style={{ transform: 'scaleX(-1)' }} />
+        <ArrowRight size={16} />
         بازگشت
       </button>
 
@@ -391,7 +393,7 @@ export default function NovelDetailPage() {
                     >
                       <div className="l">{b.label}</div>
                       <div className="d">
-                        {vol?.title ?? b.volumeId} — {new Date(b.createdAt).toLocaleDateString('fa-IR')}
+                        {vol?.title ?? b.volumeId}، {new Date(b.createdAt).toLocaleDateString('fa-IR')}
                       </div>
                     </div>
                     <button

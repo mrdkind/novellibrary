@@ -60,10 +60,28 @@ function novelsPlugin(): Plugin {
   };
 }
 
+/**
+ * F-07 — تزریق متادیتای اشتراک در زمان Build.
+ * نشانی نهایی سایت از VITE_SITE_URL خوانده می‌شود (مثل «https://USER.github.io/REPO/»)
+ * تا هر فورکی متادیتای اشتراک خودش را داشته باشد؛ Workflow رسمی این مقدار را از
+ * نام مخزن می‌سازد. در توسعه محلی (بدون VITE_SITE_URL) مقدار خالی می‌ماند؛
+ * یعنی به جای نشانی مخزن غریبه، هیچ نشانی اشتباهی منتشر نمی‌شود.
+ */
+function siteMetaPlugin(): Plugin {
+  const raw = (process.env.VITE_SITE_URL ?? '').trim();
+  const siteUrl = raw ? (raw.endsWith('/') ? raw : `${raw}/`) : '';
+  return {
+    name: 'novelshelf-site-meta',
+    transformIndexHtml(html) {
+      return html.split('__SITE_URL__').join(siteUrl);
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   base: BASE_PATH,
-  plugins: [react(), novelsPlugin()],
+  plugins: [react(), novelsPlugin(), siteMetaPlugin()],
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,

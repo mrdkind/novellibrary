@@ -16,11 +16,12 @@ import {
 import { useCatalog } from '@/hooks/useCatalog';
 import { usePersonalData } from '@/hooks/usePersonalData';
 import { collectGenres, displayTitle } from '@/services/catalog';
+import { faPercent } from '@/services/persian';
 import { BookCard } from '@/components/BookCard';
 import { BookGridSkeleton, EmptyBox, ErrorBox } from '@/components/StateBoxes';
 import { CoverImage } from '@/components/CoverImage';
 import { useDocumentTitle } from '@/hooks/misc';
-import { SITE_NAME } from '@/config';
+import { SITE_NAME, SITE_TAGLINE } from '@/config';
 import type { Novel } from '@/types';
 
 /** سقف آیتم‌های هر ردیف صفحه اصلی — بیشتر از این، دکمه «بیشتر» نمایش داده می‌شود */
@@ -109,9 +110,12 @@ function HRow({ label, children }: { label: string; children: React.ReactNode })
         if (!el) return;
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
           e.preventDefault();
-          // صفحه RTL است: فلش راست → حرکت به ابتدای ردیف (راست)
+          /* F-03 — جهت بصری: فلش باید نوار را به همان سمتی ببرد که فلش نشان می‌دهد
+           * (توصیه WAI-ARIA). در RTL مقدار scrollLeft منفی است؛ فلش راست یعنی حرکت
+           * به سمت ابتدای ردیف (سمت راست بصری) → علامت مثبت. قبلاً علامت‌ها
+           * وارونه بود و فلش راست، ردیف را به انتهای محتوا می‌برد. */
           const amount = Math.round(el.clientWidth * 0.85);
-          el.scrollBy({ left: e.key === 'ArrowRight' ? -amount : amount, behavior: 'smooth' });
+          el.scrollBy({ left: e.key === 'ArrowRight' ? amount : -amount, behavior: 'smooth' });
         }
       }}
     >
@@ -202,7 +206,7 @@ function ContinueReading() {
                   <span className="progress-track">
                     <span className="progress-fill" style={{ width: `${Math.round(p.percentage * 100)}%` }} />
                   </span>
-                  <span className="progress-label">{Math.round(p.percentage * 100)}٪ خوانده‌شده</span>
+                  <span className="progress-label">{faPercent(p.percentage)} خوانده‌شده</span>
                 </span>
               </div>
             </Link>
@@ -267,6 +271,14 @@ export default function HomePage() {
 
   return (
     <div>
+      {/* F-06 — پس از بستن بنر خوش‌آمد، صفحه اصلی نباید بدون h1 بماند
+       * (axe: page-has-heading-one)؛ عنوان فقط‌خواندنی، همیشه و بدون تغییر ظاهر */}
+      {!showWelcome && (
+        <h1 className="sr-only">
+          {SITE_NAME}؛ {SITE_TAGLINE}
+        </h1>
+      )}
+
       {/* هیرو — فقط بار اول (با بستن دستی هم حذف می‌شود) */}
       {showWelcome && (
         <div className="hero">

@@ -131,31 +131,64 @@ export function themeCss(s: ReaderSettings): string {
 
 const F = import.meta.env.BASE_URL + 'fonts/';
 
-/** CSS @font-face همه فونت‌های پیش‌فرض */
-export const FONT_BASE_CSS = `
+/**
+ * F-02 — @font-face هر فونت پیش‌فرض، جداگانه.
+ * پنل تنظیمات فقط @font-face فونت فعال (و فونت‌های انتخاب‌شده در همین نشست) را در
+ * سند اصلی ثبت می‌کند؛ کارت پیش‌نمایش بقیه فونت‌ها با فونت پیش‌فرض سایت رندر می‌شود
+ * تا باز شدن پنل، حدود ۲٫۵ مگابایت دانلود نیاورد. سند کتاب (iframe) همان‌طور که
+ * قبل، همه @font-faceها را از FONT_BASE_CSS می‌گیرد — چون فقط فونتِ استفاده‌شده
+ * دانلود می‌شود، اینجا هم هزینه اضافی ندارد.
+ */
+export const FONT_FACE_CSS = {
+  vazirmatn: `
   @font-face { font-family: 'Vazirmatn'; src: url('${F}Vazirmatn-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Vazirmatn'; src: url('${F}Vazirmatn-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  sahel: `
   @font-face { font-family: 'Sahel'; src: url('${F}Sahel-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Sahel'; src: url('${F}Sahel-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  shabnam: `
   @font-face { font-family: 'Shabnam'; src: url('${F}Shabnam-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Shabnam'; src: url('${F}Shabnam-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  estedad: `
   @font-face { font-family: 'Estedad'; src: url('${F}Estedad-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Estedad'; src: url('${F}Estedad-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  amiri: `
   @font-face { font-family: 'Amiri'; src: url('${F}Amiri-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Amiri'; src: url('${F}Amiri-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  naskh: `
   @font-face { font-family: 'Noto Naskh Arabic'; src: url('${F}NotoNaskh-Regular.woff2') format('woff2'); font-weight: 400 700; }
-  /* فونت‌های 추가 — میخک، گندم، پرستو، صمیم، شهرزاد، نستعلیق */
+`,
+  mikhak: `
   @font-face { font-family: 'Mikhak'; src: url('${F}Mikhak-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Mikhak'; src: url('${F}Mikhak-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  gandom: `
   @font-face { font-family: 'Gandom'; src: url('${F}Gandom-Regular.woff2') format('woff2'); font-weight: 400 700; }
+`,
+  parastoo: `
   @font-face { font-family: 'Parastoo'; src: url('${F}Parastoo-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Parastoo'; src: url('${F}Parastoo-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  samim: `
   @font-face { font-family: 'Samim'; src: url('${F}Samim-Regular.woff2') format('woff2'); font-weight: 400; }
   @font-face { font-family: 'Samim'; src: url('${F}Samim-Bold.woff2') format('woff2'); font-weight: 700; }
+`,
+  scheherazade: `
   @font-face { font-family: 'Scheherazade New'; src: url('${F}ScheherazadeNew-Regular.ttf') format('truetype'); font-weight: 400; }
   @font-face { font-family: 'Scheherazade New'; src: url('${F}ScheherazadeNew-Bold.ttf') format('truetype'); font-weight: 700; }
+`,
+  nastaliq: `
   @font-face { font-family: 'Noto Nastaliq Urdu'; src: url('${F}NotoNastaliqUrdu-Variable.ttf') format('truetype'); font-weight: 400 700; }
-`;
+`,
+} as const;
+
+/** CSS @font-face همه فونت‌های پیش‌فرض (برای تزریق در سند کتاب) */
+export const FONT_BASE_CSS = Object.values(FONT_FACE_CSS).join('\n');
 
 /** نام خانواده CSS برای هر فونت */
 export function fontStackCss(f: ReaderSettings['fontFamily'], customFonts: CustomFont[]): string | null {

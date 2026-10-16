@@ -8,33 +8,41 @@
     <title>روایت بی‌پایان | Novel Library</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- SEO-001 — متادیتای اشتراک‌گذاری (Open Graph / Twitter) و آدرس کانونیکال -->
-    <link rel="canonical" href="https://mrdkind.github.io/novellibrary/" />
+    <!-- SEO-001 — متادیتای اشتراک‌گذاری (Open Graph / Twitter) و آدرس کانونیکال.
+         F-07 — نشانی سایت هاردکد نیست؛ در زمان Build با VITE_SITE_URL جایگزین می‌شود
+         (پلاگین siteMetaPlugin در vite.config.ts؛ در Workflow رسمی از نام مخزن ساخته
+         می‌شود) تا هر فورکی متادیتای اشتراک خودش را داشته باشد. -->
+    <link rel="canonical" href="__SITE_URL__" />
     <meta property="og:site_name" content="روایت بی‌پایان | Novel Library" />
     <meta property="og:title" content="روایت بی‌پایان | Novel Library" />
     <meta property="og:description" content="کتابخانه آنلاین ناول و کتاب‌خوان EPUB با تجربه مطالعه فارسی؛ پیشرفت مطالعه، نشانک‌ها و تنظیمات فقط در مرورگر شما ذخیره می‌شود." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://mrdkind.github.io/novellibrary/" />
+    <meta property="og:url" content="__SITE_URL__" />
     <meta property="og:locale" content="fa_IR" />
-    <meta property="og:image" content="https://mrdkind.github.io/novellibrary/og-cover.png" />
+    <meta property="og:image" content="__SITE_URL__og-cover.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="روایت بی‌پایان — کتابخانه آنلاین ناول و کتاب‌خوان EPUB" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="روایت بی‌پایان | Novel Library" />
     <meta name="twitter:description" content="کتابخانه آنلاین ناول و کتاب‌خوان EPUB با تجربه مطالعه فارسی" />
-    <meta name="twitter:image" content="https://mrdkind.github.io/novellibrary/og-cover.png" />
+    <meta name="twitter:image" content="__SITE_URL__og-cover.png" />
 
     <script>
-      // اعمال تم ذخیره‌شده قبل از اولین رندر برای جلوگیری از پرش رنگ
+      // اعمال تم ذخیره‌شده قبل از اولین رندر برای جلوگیری از پرش رنگ.
+      // سه حالت: تاریک / روشن / سیستم (پیروی از prefers-color-scheme)
       (function () {
+        var t = null;
         try {
-          var t = localStorage.getItem('ns-site-theme');
-          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
-          else document.documentElement.setAttribute('data-theme', 'dark');
+          t = localStorage.getItem('ns-site-theme');
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark');
+          /* ignore */
         }
+        var light =
+          t === 'light' ||
+          (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+        // بدون انتخاب ذخیره‌شده، پیش‌فرض همان «تاریک» است
+        document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
       })();
     </script>
   </head>

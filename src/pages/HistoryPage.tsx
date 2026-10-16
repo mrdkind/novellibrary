@@ -9,6 +9,7 @@ import { EmptyBox, LoadingBox } from '@/components/StateBoxes';
 import { useToast } from '@/components/Toast';
 import { useDocumentTitle } from '@/hooks/misc';
 import { displayTitle } from '@/services/catalog';
+import { faPercent } from '@/services/persian';
 
 export default function HistoryPage() {
   useDocumentTitle('تاریخچه مطالعه');
@@ -65,7 +66,7 @@ export default function HistoryPage() {
                   </Link>
                   <div style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>{volume.title}</div>
                   {pct !== null && (
-                    <div style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>پیشرفت: {Math.round(pct * 100)}٪</div>
+                    <div style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>پیشرفت: {faPercent(pct)}</div>
                   )}
                 </div>
                 <span className="when">{new Date(h.updatedAt).toLocaleString('fa-IR')}</span>

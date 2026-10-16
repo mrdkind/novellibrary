@@ -140,7 +140,7 @@ export default function LibraryPage() {
           کتابخانه
         </h1>
         <p className="lib-sub">
-          آرشیو ناول‌های ترجمه‌شده — جست‌وجو کنید، فیلتر بزنید و کتاب بعدی‌تان را انتخاب کنید.
+          آرشیو ناول‌های ترجمه‌شده؛ جست‌وجو کنید، فیلتر بزنید و کتاب بعدی‌تان را انتخاب کنید.
         </p>
         <div className="lib-stats">
           <div className="lib-stat">

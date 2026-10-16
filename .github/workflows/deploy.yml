@@ -40,10 +40,10 @@ jobs:
       - name: اعتبارسنجی کتابخانه
         run: npm run validate:library
 
-      - name: اجرای تست‌ها
+      - name: اجرای تست‌ها (شامل lint نگارش فارسی رشته‌های رابط)
         run: npm test
 
-      - name: محاسبه Base Path سایت
+      - name: محاسبه Base Path و نشانی نهایی سایت
         id: base
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
@@ -51,13 +51,19 @@ jobs:
           # اگر مخزن، مخزن «سایت کاربر» باشد (USERNAME.github.io) سایت روی ریشه است
           if [ "$REPO_NAME" = "${OWNER}.github.io" ]; then
             echo "base=/" >> "$GITHUB_OUTPUT"
+            echo "site-url=https://${OWNER}.github.io/" >> "$GITHUB_OUTPUT"
             echo "Base Path: /"
           else
             echo "base=/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
+            echo "site-url=https://${OWNER}.github.io/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
             echo "Base Path: /${REPO_NAME}/"
           fi
 
       - name: ساخت سایت
+        env:
+          # F-07 — متادیتای اشتراک (canonical/OG) از نشانی واقعی انتشار ساخته می‌شود
+          # تا هر فورک، متادیتای خودش را داشته باشد (به‌جای نشانی هاردکد مخزن اصلی)
+          VITE_SITE_URL: ${{ steps.base.outputs.site-url }}
         run: npm run build -- --base="${{ steps.base.outputs.base }}"
 
       - name: تنظیم Pages

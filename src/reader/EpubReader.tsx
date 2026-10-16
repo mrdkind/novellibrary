@@ -10,6 +10,7 @@ import {
   BookmarkPlus,
   Check,
   ChevronLeft,
+  ChevronRight,
   CornerDownRight,
   List,
   LocateFixed,
@@ -154,6 +155,58 @@ function spineIndexOfHref(book: Book, href: string): number {
   return -1;
 }
 
+/**
+ * A11Y-005 (F-06) — فوکوس‌تراپ برای گفت‌وگوهای کتاب‌خوان + بازیابی فوکوس پس از بستن.
+ * استاندارد WAI-ARIA: در مدال، فوکوس نباید به پس‌زمینه فرار کند؛ Tab/Shift+Tab
+ * داخل گفت‌وگو می‌چرخند و پس از بستن، فوکوس به عنصر باز‌کننده برمی‌گردد.
+ */
+function trapFocusIn(container: HTMLElement): () => void {
+  const prev = document.activeElement as HTMLElement | null;
+  const selector =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const collect = () =>
+    Array.from(container.querySelectorAll<HTMLElement>(selector)).filter((el) => el.getClientRects().length > 0);
+  const focusFirst = () => {
+    const list = collect();
+    (list[0] ?? container).focus();
+  };
+  // فوکوس اولیه پس از رندر گفت‌وگو
+  const raf = requestAnimationFrame(focusFirst);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Tab') return;
+    const list = collect();
+    if (list.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = list[0];
+    const last = list[list.length - 1];
+    const cur = document.activeElement;
+    if (!container.contains(cur)) {
+      e.preventDefault();
+      focusFirst();
+      return;
+    }
+    if (e.shiftKey && cur === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && cur === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+  container.addEventListener('keydown', onKey);
+  return () => {
+    cancelAnimationFrame(raf);
+    container.removeEventListener('keydown', onKey);
+    try {
+      if (prev && prev.isConnected) prev.focus();
+    } catch {
+      /* ignore */
+    }
+  };
+}
+
 export default function EpubReader(props: EpubReaderProps) {
   const {
     novel,
@@ -244,6 +297,11 @@ export default function EpubReader(props: EpubReaderProps) {
   /** آینه panel برای استفاده در callbackهای بدون وابستگی */
   const panelRef = useRef(panel);
   panelRef.current = panel;
+  /** A11Y-005 (F-06) — رفرنس گفت‌وگوها برای فوکوس‌تراپ */
+  const chaptersDialogRef = useRef<HTMLDivElement>(null);
+  const bookmarksPanelRef = useRef<HTMLDivElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
   /** UX-002 — ردیابی لمس/کلیک روی تصاویر برای تشخیص دوبارلمس */
   const lastImgTapRef = useRef<{ t: number; src: string } | null>(null);
   const imgTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -951,6 +1009,28 @@ export default function EpubReader(props: EpubReaderProps) {
     setPanel('chapters');
   }, []);
 
+  /* ---------- A11Y-005 (F-06) — فوکوس‌تراپ مدال‌ها و بازیابی فوکوس ----------
+   * سه پنل کتاب‌خوان (فهرست فصل‌ها، نشانک‌ها، تنظیمات) و بزرگ‌نمایی تصویر،
+   * گفت‌وگوی مدال هستند؛ Tab داخلشان قفل می‌شود و پس از بستن، فوکوس برمی‌گردد. */
+  useEffect(() => {
+    if (panel === 'none') return;
+    const container =
+      panel === 'chapters'
+        ? chaptersDialogRef.current
+        : panel === 'bookmarks'
+          ? bookmarksPanelRef.current
+          : settingsPanelRef.current;
+    if (!container) return;
+    return trapFocusIn(container);
+  }, [panel]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const container = lightboxRef.current;
+    if (!container) return;
+    return trapFocusIn(container);
+  }, [lightbox]);
+
   /* ---------- دکمه‌های نوار ناوبری فصل داخل iframe ---------- */
   const handleNavAction = useCallback(
     (action: string) => {
@@ -1364,6 +1444,11 @@ export default function EpubReader(props: EpubReaderProps) {
 
   return (
     <div className={`reader-shell theme-${settings.theme}`} style={shellVars} ref={shellRef} dir="rtl">
+      {/* A11Y-005 (F-06) — اعلام تغییر فصل برای صفحه‌خوان */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {status === 'ready' && currentChapter ? `فصل جاری: ${currentChapter}` : ''}
+      </div>
+
       {/* نوار بالایی */}
       {chromeVisible && (
         <div className="reader-toolbar">
@@ -1513,12 +1598,15 @@ export default function EpubReader(props: EpubReaderProps) {
         </div>
       )}
 
-      {/* نوار وضعیت و پرش — مختص فصل جاری (نه کل جلد)، طبق درخواست کاربر */}
+      {/* نوار وضعیت و پرش — مختص فصل جاری (نه کل جلد) */}
       {chromeVisible && (
         <div className="reader-statusbar">
-          {/* بر اساس درخواست کاربر: فلش راست‌نما = بعدی، فلش چپ‌نما = قبلی */}
-          <button type="button" className="tbtn" onClick={goNext} aria-label="صفحه بعدی" title="صفحه بعدی">
-            <ChevronLeft size={20} style={{ transform: 'scaleX(-1)' }} />
+          {/* F-01 — هم‌ترازی با هر سه مکانیزم ناوبری دیگر (نواحی لمسی، کیبورد، سوایپ):
+           * در RTL «بعدی» در لبه چپ با فلش چپ‌نما و «قبلی» در لبه راست با فلش راست‌نما.
+           * قبلاً نوار برعکس بود و همان لبه‌ای که لمسش «بعدی» می‌داد، در نوار «قبلی» بود.
+           * استدلال تصمیم در README، بخش «تصمیم‌های فنی» ثبت شده است. */}
+          <button type="button" className="tbtn" onClick={goPrev} aria-label="صفحه قبلی" title="صفحه قبلی">
+            <ChevronRight size={20} />
           </button>
           <input
             type="range"
@@ -1533,7 +1621,7 @@ export default function EpubReader(props: EpubReaderProps) {
           <span className="pct" title="پیشرفت فصل جاری">
             {faDigits(Math.round((scrubPct ?? chapterPct) * 100)) + '٪'}
           </span>
-          <button type="button" className="tbtn" onClick={goPrev} aria-label="صفحه قبلی" title="صفحه قبلی">
+          <button type="button" className="tbtn" onClick={goNext} aria-label="صفحه بعدی" title="صفحه بعدی">
             <ChevronLeft size={20} />
           </button>
         </div>
@@ -1562,7 +1650,7 @@ export default function EpubReader(props: EpubReaderProps) {
             if (e.target === e.currentTarget) setPanel('none');
           }}
         >
-          <div className="chapter-popup" role="dialog" aria-modal="true" aria-label="فهرست فصل‌ها">
+          <div ref={chaptersDialogRef} className="chapter-popup" role="dialog" aria-modal="true" aria-label="فهرست فصل‌ها">
             <header>
               <List size={17} />
               <div className="cp-titles">
@@ -1625,7 +1713,15 @@ export default function EpubReader(props: EpubReaderProps) {
                       onClick={() => void jumpTo(item.href)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && void jumpTo(item.href)}
+                      /* F-06 — فعال‌سازی با Space هم مثل Enter (هم‌سو با صفحه جزئیات)؛
+                       * stopPropagation تا Space هم‌زمان ورق‌زدن کلید Space را فعال نکند */
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void jumpTo(item.href);
+                        }
+                      }}
                     >
                       <span className="idx">{faDigits(item.num)}</span>
                       <span className="t">{item.title}</span>
@@ -1641,7 +1737,7 @@ export default function EpubReader(props: EpubReaderProps) {
 
       {/* ---------- پنل نشانک‌ها ---------- */}
       {panel === 'bookmarks' && (
-        <aside className="reader-panel" aria-label="نشانک‌ها">
+        <aside ref={bookmarksPanelRef} className="reader-panel" aria-label="نشانک‌ها">
           <h3>
             <BookmarkIcon size={17} /> نشانک‌های این جلد
             <button type="button" className="tbtn panel-close" onClick={() => setPanel('none')} aria-label="بستن">
@@ -1664,7 +1760,19 @@ export default function EpubReader(props: EpubReaderProps) {
             )}
             {bookmarks.map((b) => (
               <div key={b.id} className="bookmark-item">
-                <div className="bi-label" onClick={() => void jumpTo(b.cfi)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && void jumpTo(b.cfi)}>
+                <div
+                  className="bi-label"
+                  onClick={() => void jumpTo(b.cfi)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void jumpTo(b.cfi);
+                    }
+                  }}
+                >
                   <div className="l">{b.label}</div>
                   <div className="d">{new Date(b.createdAt).toLocaleDateString('fa-IR')} · {new Date(b.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
@@ -1679,7 +1787,7 @@ export default function EpubReader(props: EpubReaderProps) {
 
       {/* ---------- پنل تنظیمات (بازطراحی کامل) ---------- */}
       {panel === 'settings' && (
-        <aside className="reader-panel wide" aria-label="تنظیمات نمایش">
+        <aside ref={settingsPanelRef} className="reader-panel wide" aria-label="تنظیمات نمایش">
           <h3>
             <Settings2 size={17} /> تنظیمات نمایش
             <button type="button" className="tbtn panel-close" onClick={() => setPanel('none')} aria-label="بستن">
@@ -1726,6 +1834,7 @@ export default function EpubReader(props: EpubReaderProps) {
       {/* ---------- بزرگ‌نمایی تصویر ---------- */}
       {lightbox && (
         <div
+          ref={lightboxRef}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1738,6 +1847,7 @@ export default function EpubReader(props: EpubReaderProps) {
           }}
           onClick={() => setLightbox(null)}
           role="dialog"
+          aria-modal="true"
           aria-label="نمایش تصویر در اندازه کامل"
         >
           <img

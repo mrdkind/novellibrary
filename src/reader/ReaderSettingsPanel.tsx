@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   Contrast,
@@ -11,7 +11,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { CustomFont, ReaderSettings, ReaderTheme } from '@/types';
-import { FONT_BASE_CSS, THEME_PALETTES } from './readerSettings';
+import { FONT_FACE_CSS, THEME_PALETTES } from './readerSettings';
 import { faDigits } from '@/services/persian';
 import { useToast } from '@/components/Toast';
 
@@ -58,15 +58,39 @@ export default function ReaderSettingsPanel({
   const fontFileRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
 
-  /* ثبت @font-face فونت‌های پیش‌فرض در سند اصلی — فقط برای پیش‌نمایش دقیق کارت‌های فونت.
-   * فونت‌ها به‌صورت تنبل بارگذاری می‌شوند و بار اضافه‌ای روی صفحه نمی‌گذارند. */
+  /* ثبت @font-face فونت‌های پیش‌فرض در سند اصلی — فقط برای پیش‌نمایش کارت‌های فونت.
+   * F-02 — قبلاً FONT_BASE_CSS کامل (هر ۱۳ فونت) تزریق می‌شد و صرفاً با باز شدن
+   * پنل حدود ۲٫۵ مگابایت فونت (نستعلیق، شهرزاد و…) دانلود می‌شد. اکنون فقط
+   * فونت فعال (و فونت‌هایی که در همین نشست انتخاب شده‌اند) ثبت می‌شود؛
+   * پیش‌نمایش بقیه کارت‌ها با فونت پیش‌فرض سایت رندر می‌شود. فونت فعال
+   * معمولاً از قبل در کش HTTP هست (کتاب‌خوان همان فایل را استفاده می‌کند). */
+  const [loadedFonts, setLoadedFonts] = useState<ReadonlySet<string>>(() => new Set([settings.fontFamily]));
+
   useEffect(() => {
-    if (document.getElementById('ns-reader-fonts-preview')) return;
-    const style = document.createElement('style');
-    style.id = 'ns-reader-fonts-preview';
-    style.textContent = FONT_BASE_CSS;
-    document.head.appendChild(style);
-  }, []);
+    const key = settings.fontFamily;
+    if (key === 'custom' || key === 'default') return;
+    setLoadedFonts((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }, [settings.fontFamily]);
+
+  useEffect(() => {
+    const faces = [...loadedFonts].filter(
+      (k): k is keyof typeof FONT_FACE_CSS => k in FONT_FACE_CSS,
+    );
+    if (faces.length === 0) return;
+    const styleId = 'ns-reader-fonts-preview';
+    let style = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = faces.map((k) => FONT_FACE_CSS[k]).join('\n');
+  }, [loadedFonts]);
 
   const set = (patch: Partial<ReaderSettings>) => onSettingsChange({ ...settings, ...patch });
 
@@ -335,7 +359,9 @@ export default function ReaderSettingsPanel({
               role="radio"
               aria-checked={activeFontKey === f.key}
               className={`font-card ${activeFontKey === f.key ? 'on' : ''}`}
-              style={f.css ? { fontFamily: f.css } : undefined}
+              /* F-02 — پیش‌نمایش با فونت واقعی فقط برای فونت‌های ثبت‌شده (فعال + انتخاب‌شده‌های نشست)؛
+               * بقیه کارت‌ها با فونت پیش‌فرض رندر می‌شوند تا دانلود سنگینی رخ ندهد */
+              style={f.css && loadedFonts.has(f.key) ? { fontFamily: f.css } : undefined}
               onClick={() => set({ fontFamily: f.key })}
             >
               <span className="fc-sample" aria-hidden="true">
@@ -394,7 +420,7 @@ export default function ReaderSettingsPanel({
         </button>
         {settings.fontFamily === 'nastaliq' && (
           <p className="rsp-hint">
-            فونت نستعلیق کشیدگی عمودی زیاد دارد؛ برای خوانایی بیشتر، «فاصله خطوط» را روی ۲.۲ یا بالاتر بگذارید.
+            فونت نستعلیق کشیدگی عمودی زیاد دارد؛ برای خوانایی بیشتر، «فاصله خطوط» را روی ۲٫۲ یا بالاتر بگذارید.
           </p>
         )}
         <input

@@ -18,6 +18,7 @@ export default function ReaderPage() {
 
   const novel = useMemo(() => novelById(novels, bookId), [novels, bookId]);
   const volume = useMemo(() => volumeById(novel, volumeId), [novel, volumeId]);
+  // fa-lint:allow — «—» اینجا جداکننده عنوان تب است (هم‌سو با الگوی useDocumentTitle)، نه نثر فارسی
   useDocumentTitle(novel ? `${novel.titleFa ?? novel.titleOriginal ?? novel.id} — خواندن` : undefined);
 
   /**

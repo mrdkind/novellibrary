@@ -47,7 +47,7 @@ export const BookCard = memo(function BookCard({ novel, progress, favorite }: Bo
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${Math.round(progress.percentage * 100)}%` }} />
             </div>
-            <div className="progress-label">ادامه مطالعه — {faPercent(progress.percentage)}</div>
+            <div className="progress-label">ادامه مطالعه؛ {faPercent(progress.percentage)}</div>
           </div>
         )}
       </div>
