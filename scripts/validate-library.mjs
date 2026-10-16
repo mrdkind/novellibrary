@@ -25,6 +25,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const novelsDir = path.resolve(ROOT, process.argv[2] ?? 'novels');
 
+/** CONTENT-001 — الگوی خلاصه‌های موقت/placeholder (متن نمونه سازنده کتاب) */
+const PLACEHOLDER_DESC_RE = /اینجا قرار می|حداقل بیست نویسه|placeholder/i;
+
 async function main() {
   console.log('اعتبارسنجی کتابخانه…');
   const slugs = listNovelFolders(novelsDir);
@@ -69,6 +72,14 @@ async function main() {
       } else {
         seenIds.set(info.id, slug);
       }
+    }
+
+    // CONTENT-001 — هشدار خلاصه placeholder: انتشار عمومی متن موقت، اعتماد مخاطب را خدشه‌دار می‌کند
+    if (typeof info?.description === 'string' && PLACEHOLDER_DESC_RE.test(info.description)) {
+      issues.push({
+        severity: 'warning',
+        message: 'خلاصهٔ داستان هنوز متن موقت/placeholder است؛ پیش از انتشار عمومی آن را با خلاصه واقعی جایگزین کنید.',
+      });
     }
 
     for (const issue of issues) {

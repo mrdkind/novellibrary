@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Bookmark, CustomFont, HistoryEntry, ReadingProgress } from '@/types';
 import { DEFAULT_READER_SETTINGS, normalizeReaderSettings } from '@/types';
@@ -33,6 +33,11 @@ interface PersonalDataCtx {
 
 const Ctx = createContext<PersonalDataCtx | null>(null);
 
+/** نام کانال همگام‌سازی بین-تبی داده‌های شخصی */
+const SYNC_CHANNEL = 'ns-personal-sync';
+/** کلید مهاجرت یک‌باره جهت پیش‌فرض (UX-001) */
+const DIR_MIGRATION_KEY = 'direction-auto-migrated';
+
 export function PersonalDataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [progressMap, setProgressMap] = useState<Map<string, ReadingProgress>>(new Map());
@@ -56,7 +61,25 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
       setBookmarks(bms.sort((a, b) => b.createdAt - a.createdAt));
       setFavorites(new Set(favs.map((f) => f.bookId)));
       setHistory(hist);
-      setReaderSettingsState(normalizeReaderSettings(settings));
+
+      /* UX-001 — مهاجرت یک‌باره: نسخه‌های قبلی پیش‌فرض RTL داشتند که با کتاب‌های
+       * انگلیسی ناسازگار بود؛ پیشرفت قدیمیِ ذخیره‌شده فقط یک بار به «خودکار» تبدیل می‌شود.
+       * پس از مهاجرت، انتخاب دستی کاربر همیشه محترم شمرده می‌شود. */
+      let effSettings = normalizeReaderSettings(settings);
+      try {
+        const migrated = await repo.getSetting<boolean>(DIR_MIGRATION_KEY, false);
+        if (!migrated) {
+          await repo.setSetting(DIR_MIGRATION_KEY, true);
+          if (effSettings.direction === 'rtl') {
+            effSettings = { ...effSettings, direction: 'auto' };
+            await repo.setSetting('reader', effSettings);
+          }
+        }
+      } catch {
+        /* مهاجرت حیاتی نیست */
+      }
+      setReaderSettingsState(effSettings);
+
       const fontList = Array.isArray(fonts) ? fonts : [];
       setCustomFonts(fontList);
       registerCustomFontsInDocument(fontList);
@@ -64,6 +87,36 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
       console.warn('خواندن داده‌های محلی ناموفق بود:', e);
     } finally {
       setReady(true);
+    }
+  }, []);
+
+  /* ---------- LOGIC-001 — همگام‌سازی بین تب‌ها ----------
+   * هر نوشتن، یک پیام کوتاه در BroadcastChannel پخش می‌کند و بقیه تب‌ها داده را
+   * دوباره می‌خوانند؛ دیگر «آخرین نوشنده» رابط تب دیگر را کهنه نمی‌گذارد.
+   * refresh خودش پیامی پخش نمی‌کند، پس حلقه بی‌نهایت شکل نمی‌گیرد. */
+  const syncRef = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    try {
+      if (typeof BroadcastChannel === 'undefined') return;
+      const ch = new BroadcastChannel(SYNC_CHANNEL);
+      ch.onmessage = () => {
+        void refresh();
+      };
+      syncRef.current = ch;
+      return () => {
+        ch.close();
+        syncRef.current = null;
+      };
+    } catch {
+      /* پشتیبانی نمی‌شود — تک‌کاری */
+    }
+  }, [refresh]);
+
+  const notifySync = useCallback(() => {
+    try {
+      syncRef.current?.postMessage('changed');
+    } catch {
+      /* ignore */
     }
   }, []);
 
@@ -81,8 +134,9 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
     setCustomFonts(next);
     await repo.setSetting('customFonts', next);
     registerCustomFontsInDocument([font]);
+    notifySync();
     return font;
-  }, [customFonts]);
+  }, [customFonts, notifySync]);
 
   const deleteCustomFont = useCallback(async (id: string) => {
     const next = customFonts.filter((f) => f.id !== id);
@@ -97,7 +151,8 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
       }
       return s;
     });
-  }, [customFonts]);
+    notifySync();
+  }, [customFonts, notifySync]);
 
   const saveProgress = useCallback(async (p: ReadingProgress) => {
     await repo.saveProgress(p);
@@ -106,7 +161,8 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
       next.set(`${p.bookId}::${p.volumeId}`, p);
       return next;
     });
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const toggleFavorite = useCallback(async (bookId: string) => {
     await repo.toggleFavorite(bookId);
@@ -116,34 +172,40 @@ export function PersonalDataProvider({ children }: { children: ReactNode }) {
       else next.add(bookId);
       return next;
     });
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const addBookmark = useCallback(async (b: Omit<Bookmark, 'id' | 'createdAt'>) => {
     const bm = repo.newBookmark(b);
     await repo.addBookmark(bm);
     setBookmarks((list) => [bm, ...list]);
+    notifySync();
     return bm;
-  }, []);
+  }, [notifySync]);
 
   const deleteBookmark = useCallback(async (id: string) => {
     await repo.removeBookmark(id);
     setBookmarks((list) => list.filter((b) => b.id !== id));
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const touchHistory = useCallback(async (bookId: string, volumeId: string) => {
     await repo.touchHistory(bookId, volumeId);
     setHistory(await repo.getHistory());
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const removeHistory = useCallback(async (bookId: string) => {
     await repo.removeHistoryEntry(bookId);
     setHistory(await repo.getHistory());
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const setReaderSettings = useCallback((s: ReaderSettings) => {
     setReaderSettingsState(s);
     void repo.setSetting('reader', s);
-  }, []);
+    notifySync();
+  }, [notifySync]);
 
   const value = useMemo<PersonalDataCtx>(
     () => ({

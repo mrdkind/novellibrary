@@ -102,7 +102,8 @@
   --border-soft: #232a36;
   --text: #e9ecf2;
   --text-soft: #b9c0cd;
-  --muted: #8b93a5;
+  /* A11Y-001: روشن‌تر از این مجاز نیست؛ کنتراست روی روشن‌ترین سطح باید ≥ ۴٫۵ باشد */
+  --muted: #949dae;
   --accent: #e2a94f;
   --accent-strong: #f2bd66;
   --accent-ink: #241a08;
@@ -131,14 +132,16 @@
   --border-soft: #eae4d6;
   --text: #23262e;
   --text-soft: #4a4f5c;
-  --muted: #7a7f8e;
-  --accent: #a8680c;
-  --accent-strong: #8a5508;
+  /* A11Y-001: #7a7f8e قبلی فقط ~۳٫۳:۱ کنتراست داشت؛ این مقدار روی همه سطوح روشن ≥ ۴٫۷ است */
+  --muted: #5f6675;
+  --accent: #8a5508;
+  --accent-strong: #7f4e07;
   --accent-ink: #fff8ec;
-  --accent-soft: rgba(168, 104, 12, 0.12);
+  --accent-soft: rgba(138, 85, 8, 0.12);
   --teal: #0e8a76;
-  --danger: #c9433f;
-  --danger-soft: rgba(201, 67, 63, 0.12);
+  /* A11Y-001 — #c9433f قبلی روی danger-soft فقط ~۴٫۰:۱ بود */
+  --danger: #b23a36;
+  --danger-soft: rgba(178, 58, 54, 0.12);
   --ok: #2c9c6b;
   --shadow-1: 0 1px 2px rgba(60, 50, 30, 0.1);
   --shadow-2: 0 10px 30px rgba(60, 50, 30, 0.14);
@@ -147,6 +150,19 @@
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --hero-grad: radial-gradient(1100px 400px at 85% -10%, rgba(168, 104, 12, 0.1), transparent 60%),
     radial-gradient(900px 360px at 10% -20%, rgba(14, 138, 118, 0.08), transparent 55%);
+}
+
+/* متن فقط-صفحه‌خوان (بدون تغییر ظاهر) — برای Label in Name برند */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---------- ریست و پایه ---------- */
@@ -1843,6 +1859,24 @@ a:hover {
   padding: 0.1rem 0.5rem;
 }
 
+/* UX-003 — سرگروه‌های ده‌تایی در فهرست فصل‌های صفحه جزئیات */
+.chapter-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.2rem 0.2rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+  user-select: none;
+}
+.chapter-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+
 .collapse-toggle {
   background: none;
   border: none;
@@ -2120,12 +2154,35 @@ a:hover {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 0.75rem 0.6rem 1rem;
   font-size: 0.88rem;
   font-weight: 500;
   box-shadow: var(--shadow-2);
   animation: slideUp 0.18s ease;
   max-width: min(420px, 90vw);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+/* LOGIC-002 — دکمه بستن توست */
+.toast .toast-close {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -0.15rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.toast .toast-close:hover {
+  background: rgba(128, 128, 128, 0.18);
+  color: var(--text);
 }
 
 .toast.success {
@@ -2195,6 +2252,36 @@ a:hover {
   border-bottom: 1px solid var(--reader-border);
   flex-wrap: wrap;
   min-height: 52px;
+}
+
+/* VIS-001 — چیدمان تک‌ردیفی موبایل:
+ * در عرض‌های باریک، نام فصل (تکراری با نوار وضعیت/پاپ‌آپ) حذف و عنوان انعطاف می‌گیرد
+ * تا نوار ابزار هرگز به دو ردیف ناهماهنگ نشکند. */
+@media (max-width: 600px) {
+  .reader-toolbar {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    padding-inline: 0.5rem;
+  }
+  .reader-toolbar .title {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    font-size: 0.88rem;
+  }
+  .reader-toolbar .chapter,
+  .reader-toolbar .spacer {
+    display: none;
+  }
+}
+
+/* در باریک‌ترین عرض‌ها دکمه تمام‌صفحه حذف می‌شود؛
+ * مرورگرهای موبایل (به‌ویژه iOS) از API تمام‌صفحه پشتیبانی نمی‌کنند و
+ * حذف آن جای یکنواخت‌تر برای عنوان می‌گذارد (میان‌بر F همچنان فعال است). */
+@media (max-width: 470px) {
+  .reader-toolbar .tbtn.btn-fs {
+    display: none;
+  }
 }
 
 /* پوسته شیشه‌ای — با پشتیبانی‌نشدن blur، رنگ کدر جایگزین می‌شود */
@@ -2317,6 +2404,16 @@ a:hover {
   -webkit-overflow-scrolling: touch;
 }
 
+/* A11Y-004 — ناحیه اسکرول با Tab فوکوس‌پذیر است (tabIndex در JSX)؛
+ * حلقه فوکوس فقط با صفحه‌کلید نمایش داده می‌شود و از درون می‌افتد تا چیدمان نلرزد */
+.reader-container.scrolled:focus {
+  outline: none;
+}
+.reader-container.scrolled:focus-visible {
+  outline: 2px solid var(--reader-accent);
+  outline-offset: -3px;
+}
+
 .reader-container.scrolled .rendition-host {
   width: 100%;
 }
@@ -2353,6 +2450,14 @@ a:hover {
   flex: 1;
   accent-color: var(--reader-accent);
   direction: ltr;
+  /* A11Y-005 — هدف لمسی ≥ ۲۴px (WCAG 2.5.8)؛ در دستگاه لمسی باز هم پهن‌تر */
+  height: 28px;
+}
+
+@media (pointer: coarse) {
+  .reader-statusbar input[type='range'] {
+    height: 36px;
+  }
 }
 
 .reader-statusbar .pct {
@@ -2707,6 +2812,55 @@ a:hover {
   text-align: center;
 }
 
+/* UX-003 — سرگروه‌های ده‌تایی در فهرست فصل‌های بلند */
+.chapter-popup .cp-decade {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.5rem 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--reader-muted);
+  user-select: none;
+}
+.chapter-popup .cp-decade::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--reader-border);
+}
+
+/* UX-003 — دکمه چسبان «پرش به فصل جاری» */
+.chapter-popup .cp-jump {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0.25rem 0.25rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--reader-border);
+  border-radius: 999px;
+  background: var(--reader-chrome);
+  color: var(--reader-fg);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--reader-shadow);
+  transition: background-color 0.15s ease;
+}
+.chapter-popup .cp-jump:hover {
+  background: color-mix(in srgb, var(--reader-accent) 14%, var(--reader-chrome));
+}
+.chapter-popup .cp-jump:focus-visible {
+  outline: 2px solid var(--reader-accent);
+  outline-offset: 2px;
+}
+
 .setting-slider {
   width: 100%;
   accent-color: var(--reader-accent);
@@ -2845,6 +2999,29 @@ a:hover {
   text-overflow: ellipsis;
   box-shadow: var(--reader-shadow, 0 6px 24px rgba(0, 0, 0, 0.35));
   animation: fadeIn 0.35s ease;
+}
+
+/* UX-004 — هشدار «خروج دو مرحله‌ای» با Escape */
+.exit-arm-hint {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  background: var(--reader-chrome);
+  border: 1px solid var(--reader-accent);
+  color: var(--reader-fg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--reader-shadow, 0 6px 24px rgba(0, 0, 0, 0.35));
+  animation: fadeIn 0.2s ease;
+  pointer-events: none;
 }
 
 @media (max-width: 520px) {
@@ -3456,7 +3633,12 @@ a:hover {
 }
 
 .setting-row.muted-row {
-  opacity: 0.55;
+  /* A11Y-001 — opacity روی متن، کنتراست را زیر حد AA می‌برد؛
+   * حالت غیرفعال با رنگ کم‌رنگِ مجاز (var(--muted)) القا می‌شود */
+  color: var(--muted);
+}
+.setting-row.muted-row .label {
+  color: var(--muted);
 }
 
 .slider-control {

@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { BookX } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -26,7 +27,10 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center', padding: '2rem', textAlign: 'center' }}>
           <div style={{ maxWidth: 480 }}>
-            <div style={{ fontSize: '2.6rem', marginBottom: '0.6rem' }}>😕</div>
+            {/* VIS-004 — آیکون کتابخانه به‌جای ایموجی (استاندارد سیستم طراحی) */}
+            <div style={{ display: 'grid', placeItems: 'center', marginBottom: '0.6rem', color: 'var(--accent)' }}>
+              <BookX size={46} strokeWidth={1.7} aria-hidden="true" />
+            </div>
             <h1 style={{ fontSize: '1.2rem', margin: '0 0 0.6rem' }}>مشکلی پیش آمد</h1>
             <p style={{ color: 'var(--muted)', fontSize: '0.92rem' }}>
               یک خطای غیرمنتظره رخ داد. صفحه را دوباره بارگذاری کنید. اگر خطا تکرار شد، داده‌های مرورگر را از

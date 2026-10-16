@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ePub from 'epubjs';
+import { EpubCFI } from 'epubjs';
 import type { Book, Contents, Location, Rendition, TocItem } from 'epubjs';
 import {
   ArrowRight,
@@ -9,7 +10,9 @@ import {
   BookmarkPlus,
   Check,
   ChevronLeft,
+  CornerDownRight,
   List,
+  LocateFixed,
   Maximize,
   Minimize,
   Pause,
@@ -94,6 +97,23 @@ function resolveSectionHref(book: Book, href: string): string {
 function sameHref(a: string | null | undefined, b: string): boolean {
   if (!a || !b) return false;
   return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+/**
+ * حل مسیر نسبی داخل بسته EPUB نسبت به مسیر فصل جاری (READER-002).
+ * خروجی، مسیر نسبت به ریشه بسته است (مثل «OEBPS/images/ornament-a.svg»)
+ * که می‌توان آن را به book.resources.createUrl داد.
+ * ورودی باید همان‌طور که در XHTML نوشته شده حفظ شود (٪-انکودینگ باقی بماند). */
+function resolveBookPath(sectionHref: string, rel: string): string {
+  if (/^(data:|blob:|https?:|\/)/i.test(rel)) return '';
+  const dir = sectionHref.includes('/') ? sectionHref.slice(0, sectionHref.lastIndexOf('/') + 1) : '';
+  const stack: string[] = [];
+  for (const seg of (dir + rel).split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') stack.pop();
+    else stack.push(seg);
+  }
+  return stack.join('/');
 }
 
 /**
@@ -193,10 +213,13 @@ export default function EpubReader(props: EpubReaderProps) {
   /** فیلتر جست‌وجوی عنوان فصل در پاپ‌آپ */
   const [chFilter, setChFilter] = useState('');
   const [autoPaused, setAutoPaused] = useState(false);
+  /** UX-004 — وضعیت «خروج دو مرحله‌ای» با Escape */
+  const [exitArmed, setExitArmed] = useState(false);
 
   const direction = useMemo(
-    () => effectiveDirection(settings, volume.language ?? novel.language),
-    [settings.direction, volume.language, novel.language],
+    // UX-001 — متادیتای direction کاتالوگ هم به‌عنوان فالبک «خودکار» شرکت می‌کند
+    () => effectiveDirection(settings, volume.language ?? novel.language, novel.direction),
+    [settings.direction, volume.language, novel.language, novel.direction],
   );
   /** ترجیح نمایش کنترل‌ها هنگام ورود — برای تشخیص تغییر واقعی تنظیم */
   const showToolbarPrefRef = useRef(settings.showToolbar);
@@ -221,6 +244,9 @@ export default function EpubReader(props: EpubReaderProps) {
   /** آینه panel برای استفاده در callbackهای بدون وابستگی */
   const panelRef = useRef(panel);
   panelRef.current = panel;
+  /** UX-002 — ردیابی لمس/کلیک روی تصاویر برای تشخیص دوبارلمس */
+  const lastImgTapRef = useRef<{ t: number; src: string } | null>(null);
+  const imgTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ---------- نمایش/مخفی‌کردن کنترل‌ها با لمس وسط صفحه ---------- */
   const toggleChrome = useCallback(() => {
@@ -378,6 +404,9 @@ export default function EpubReader(props: EpubReaderProps) {
           allowScriptedContent: false,
           spread: 'auto',
           minSpreadWidth: 780,
+          /* READER-005 — CFIها هرگز به نوار ناوبری تزریقی گره نخورند؛
+           * epub.js این کلاس را هنگام تولید CFI نادیده می‌گیرد */
+          ignoreClass: 'ns-ch-nav',
         });
         rendition.direction(direction);
         renditionRef.current = rendition;
@@ -393,6 +422,52 @@ export default function EpubReader(props: EpubReaderProps) {
           injectChapterNavs(contents);
           // دفاع در عمق: حذف هر اسکریپت جاسازی‌شده (allowScriptedContent=false هم فعال است)
           doc.querySelectorAll('script').forEach((n) => n.remove());
+
+          /* A11Y-003 — عنوان دسترس‌پذیری برای iframe کتاب‌خوان */
+          try {
+            const frame = contents.window.frameElement as HTMLIFrameElement | null;
+            if (frame && !frame.getAttribute('title')) frame.setAttribute('title', 'محتوای کتاب');
+          } catch {
+            /* ignore */
+          }
+
+          /* READER-002 — بازنویسی src تصاویر با مسیر نسبی «../» :
+           * در حالت بازکردن از بافر (archived)، epub.js مسیرهای نسبی والد را درست حل
+           * نمی‌کند و مرورگر آن‌ها را نسبت به ریشه سایت درخواست می‌کند (۴۰۴).
+           * راه‌حل: مسیر نسبی را نسبت به فصل جاری به مسیر داخل بسته تبدیل و با
+           * book.resources.createUrl به یک blob: URL سالم بازنویسی می‌کنیم. */
+          try {
+            const book0 = bookRef.current;
+            const sec = book0?.spine?.items?.[contents.sectionIndex as unknown as number] ?? null;
+            const secHref = sec?.href ?? '';
+            if (book0 && secHref && typeof book0.resources?.createUrl === 'function') {
+              /* hrefهای spine نسبت به پوشه OPF هستند؛ مسیر نهایی باید نسبت به
+               * ریشه بسته ZIP ساخته شود (مثلاً «OEBPS/text/…» → «OEBPS/images/…») */
+              const opfDir = book0.path?.directory ?? '';
+              const base = opfDir && !opfDir.endsWith('/') ? `${opfDir}/` : opfDir;
+              const fullSecHref = `${base}${secHref}`;
+              const createUrl = book0.resources.createUrl.bind(book0.resources);
+              doc.querySelectorAll('img').forEach((el) => {
+                const imgEl = el as HTMLImageElement;
+                const raw = imgEl.getAttribute('src');
+                if (!raw) return;
+                if (/^(data:|blob:|https?:)/i.test(raw)) return;
+                const zipPath = resolveBookPath(fullSecHref, raw);
+                if (!zipPath) return;
+                /* توجه: archive.getBlob مسیر را با substr(1) می‌خواند — اسلش ابتدایی لازم است */
+                void createUrl(`/${zipPath}`)
+                  .then((url) => {
+                    if (url && imgEl.isConnected) imgEl.src = url;
+                  })
+                  .catch(() => {
+                    /* تصویر در بسته نبود — به حالت قبل رها می‌شود */
+                  });
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+
           // جلوگیری از ارسال فرم‌های کتاب
           doc.addEventListener(
             'submit',
@@ -402,6 +477,31 @@ export default function EpubReader(props: EpubReaderProps) {
             },
             true,
           );
+
+          /* میان‌برهای صفحه‌کلید پس از کلیک داخل کتاب از کار نمی‌افتند:
+           * با کلیک روی سند کتاب، فوکوس به iframe می‌رود و keydownهای آن هرگز
+           * به شنونده پنجره اصلی نمی‌رسند؛ رویداد را به پنجره اصلی بازپخش می‌کنیم. */
+          doc.addEventListener('keydown', (ev) => {
+            try {
+              const e = ev as KeyboardEvent;
+              const t = e.target as HTMLElement | null;
+              if (t && (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement || t.isContentEditable)) return;
+              window.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                  key: e.key,
+                  code: e.code,
+                  shiftKey: e.shiftKey,
+                  ctrlKey: e.ctrlKey,
+                  altKey: e.altKey,
+                  metaKey: e.metaKey,
+                  bubbles: true,
+                }),
+              );
+            } catch {
+              /* ignore */
+            }
+          });
+
           // مدیریت لینک‌ها: داخلی → پرش، خارجی → تب جدید ایمن
           doc.addEventListener(
             'click',
@@ -418,10 +518,33 @@ export default function EpubReader(props: EpubReaderProps) {
                 return;
               }
 
-              // بزرگ‌نمایی تصاویر
+              // UX-002 — بزرگ‌نمایی تصویر فقط با «دوبار لمس/کلیک»؛ تک‌لمس تصویر،
+              // مثل متن ساده، کنترل‌ها را نشان/مخفی می‌کند تا در صفحات تصویری
+              // راهنمای «لمس وسط صفحه» گمراه‌کننده نباشد.
               const img = target.closest('img') as HTMLImageElement | null;
-              if (img && img.src) {
-                setLightbox(img.src);
+              if (img) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const src = img.currentSrc || img.src;
+                if (!src) return;
+                const now = performance.now();
+                const last = lastImgTapRef.current;
+                if (last && now - last.t < 380 && last.src === src) {
+                  // لمس دوم → بزرگ‌نمایی
+                  lastImgTapRef.current = null;
+                  if (imgTapTimerRef.current) {
+                    clearTimeout(imgTapTimerRef.current);
+                    imgTapTimerRef.current = null;
+                  }
+                  setLightbox(src);
+                } else {
+                  lastImgTapRef.current = { t: now, src };
+                  if (imgTapTimerRef.current) clearTimeout(imgTapTimerRef.current);
+                  imgTapTimerRef.current = setTimeout(() => {
+                    imgTapTimerRef.current = null;
+                    chromeToggleRef.current();
+                  }, 360);
+                }
                 return;
               }
 
@@ -473,6 +596,15 @@ export default function EpubReader(props: EpubReaderProps) {
           const href = loc?.start?.href ?? null;
           const total = Math.max(1, volume.spineCount);
 
+          /** READER-005 — جدا‌سازی CFI از گره تزریقی ناوبری:
+           * CFIهایی که به ns-ch-nav-start/end گره می‌خورند با حذف/تغییر تزریق
+           * نامعتبر می‌شوند؛ به نخستین گره واقعی محتوا اسنپ می‌کنیم. */
+          const snapCfiOffInjectedNav = (candidate?: string | null, fallback?: string | null): string | undefined => {
+            if (!candidate) return fallback ?? undefined;
+            if (!/ns-ch-nav/.test(candidate)) return candidate;
+            return fallback && !/ns-ch-nav/.test(fallback) ? fallback : candidate;
+          };
+
           // درصد: مکان‌های تولیدشده (دقیق) > جایگاه فصل در spine > مقدار خود رویداد
           let pct: number | undefined;
           if (bookRef.current && cfi && bookRef.current.locations.total > 0) {
@@ -489,10 +621,13 @@ export default function EpubReader(props: EpubReaderProps) {
             pct = typeof fromEvent === 'number' && !Number.isNaN(fromEvent) ? fromEvent : 0;
           }
 
-          if (cfi) lastCfiRef.current = cfi;
+          const startCfi = snapCfiOffInjectedNav(cfi, (loc as unknown as { end?: { cfi?: string } })?.end?.cfi ?? null);
+          const endCfi = snapCfiOffInjectedNav((loc as unknown as { end?: { cfi?: string } })?.end?.cfi ?? null, cfi);
+          if (startCfi) lastCfiRef.current = startCfi;
           if (href) lastHrefRef.current = href;
-          if (cfi) resumeCfiRef.current = cfi;
+          if (startCfi) resumeCfiRef.current = startCfi;
           if (href) resumeHrefRef.current = href;
+          void endCfi;
 
           setPercentage(pct);
 
@@ -523,23 +658,29 @@ export default function EpubReader(props: EpubReaderProps) {
             const chapterTitle = match?.title ?? '';
             currentChapterRef.current = chapterTitle;
             setCurrentChapter(chapterTitle);
-            if (cfi && href && lastReadHrefRef.current !== href) {
+            if (startCfi && href && lastReadHrefRef.current !== href) {
               lastReadHrefRef.current = href;
               onChapterRead(href);
             }
-            if (cfi && href) {
-              scheduleSave(cfi, href, chapterTitle, pct);
+            if (startCfi && href) {
+              scheduleSave(startCfi, href, chapterTitle, pct);
             }
           }
-          setIsBookmarked(Boolean(cfi && bookmarksRef.current.some((b) => b.cfi === cfi)));
+          setIsBookmarked(Boolean(startCfi && bookmarksRef.current.some((b) => b.cfi === startCfi)));
         });
 
         setToc([]);
         try {
           const nav = (await book.loaded.navigation) as { toc: TocItem[] };
-          if (!destroyed) setToc(flattenToc(nav?.toc ?? []));
+          const flat = flattenToc(nav?.toc ?? []);
+          /* اگر nav کتاب قابل استخراج نبود/خالی بود، از فصل‌های کاتالوگ (استخراج‌شده در Build) استفاده کن */
+          if (!destroyed) {
+            setToc(flat.length > 0 ? flat : volumeRef.current.chapters.map((c) => ({ title: c.title, href: c.href, depth: 0 })));
+          }
         } catch {
-          setToc(volumeRef.current.chapters.map((c) => ({ title: c.title, href: c.href, depth: 0 })));
+          if (!destroyed) {
+            setToc(volumeRef.current.chapters.map((c) => ({ title: c.title, href: c.href, depth: 0 })));
+          }
         }
 
         /* --- نقطه شروع: آخرین CFI (پس از بازسازی) > CFI ذخیره‌شده > فصل درخواستی > ابتدای جلد --- */
@@ -561,6 +702,54 @@ export default function EpubReader(props: EpubReaderProps) {
 
         if (destroyed) return;
         setStatus('ready');
+
+        /* READER-004 — بازکالیبراسیون پس از بازسازی (تغییر حالت/جهت):
+         * بلافاصله بعد از سوییچ، رویداد relocated ممکن است با displayed.total=1
+         * (پیش از آماده‌شدن ستون‌ها) صد درصد نشان دهد؛ پس از سکون، موقعیت واقعی
+         * یک بار بازخوانی و نوار درون‌فصلی اصلاح می‌شود. */
+        if (!isScrolled) {
+          setTimeout(() => {
+            if (destroyed || renditionRef.current !== rendition) return;
+            try {
+              const cur = rendition.currentLocation() as Location | null;
+              const disp =
+                (cur as unknown as { end?: { displayed?: { page?: number; total?: number } } })?.end?.displayed ??
+                (cur as unknown as { start?: { displayed?: { page?: number; total?: number } } })?.start?.displayed;
+              const pg = disp?.page ?? 0;
+              const tt = disp?.total ?? 0;
+              if (tt > 0) setChapterPct(Math.min(1, Math.max(0, pg / tt)));
+            } catch {
+              /* ignore */
+            }
+          }, 550);
+        }
+
+        /* READER-001 — بیمهٔ فرود اسکرول روی CFI در حالت پیمایشی:
+         * epub.js معمولاً خودش هنگام display(CFI) به موقعیت اسکرول می‌برد؛
+         * اگر پس از سکون اسکرول ظرف صفر مانده بود و CFI نقطه‌ای غیر از ابتدای
+         * فصل بود، دستی به عنصر هدف اسکرول می‌کنیم تا «ادامه از همان‌جا» تضمین شود. */
+        if (isScrolled && startTarget && startTarget.startsWith('epubcfi') && !/ns-ch-nav/.test(startTarget)) {
+          setTimeout(() => {
+            if (destroyed || renditionRef.current !== rendition) return;
+            try {
+              const el = scrollContainerRef.current;
+              if (!el || el.scrollTop > 8) return;
+              const cfiObj = new EpubCFI(startTarget);
+              const view = (rendition as unknown as { views?: () => { all: () => Array<Record<string, unknown>> } }).views?.().all?.()[0];
+              const doc = (view?.doc ?? view?.document ?? (view?.contents as { document?: Document } | undefined)?.document) as Document | undefined;
+              if (!doc) return;
+              const range = cfiObj.toRange(doc, 'ns-ch-nav');
+              const node = range.startContainer;
+              const targetEl = (node.nodeType === 1 ? (node as Element) : node.parentElement)?.closest?.('p, h1, h2, h3, h4, h5, h6, li, blockquote, img, div, body') ?? (node.nodeType === 1 ? (node as Element) : node.parentElement);
+              if (targetEl && targetEl !== doc.body) {
+                const top = targetEl.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+                el.scrollTo({ top: Math.max(0, top - 24), behavior: 'auto' });
+              }
+            } catch {
+              /* ignore */
+            }
+          }, 400);
+        }
 
         /* --- تولید مکان‌ها در پس‌زمینه برای درصد دقیق (فقط کتاب‌های متوسط) --- */
         if (!locationsStartedRef.current && volume.spineCount <= 220) {
@@ -680,19 +869,73 @@ export default function EpubReader(props: EpubReaderProps) {
     await r.display(resolved).catch(() => {});
   }, []);
 
-  /* ---------- درصد درون‌فصلی در حالت پیمایشی (اسکرول ظرف) ---------- */
+  /* ---------- درصد درون‌فصلی + ثبت CFI در حالت پیمایشی (اسکرول ظرف) ----------
+   * READER-001 — قبلاً اسکرول فقط درصد بصری را به‌روز می‌کرد و CFI هرگز ذخیره
+   * نمی‌شد؛ نتیجه: هر خروج/ورود = برگشت به بالای فصل. اکنون پس از ۲۶۰ms سکون
+   * اسکرول، CFI جاری از rendition.currentLocation() خوانده و در همان صف ذخیره
+   * (scheduleSave) می‌رود؛ پیشرفت کل جلد و «ادامه مطالعه» هم واقعی می‌شود. */
   useEffect(() => {
     if (!isScrolled || status !== 'ready') return;
     const el = scrollContainerRef.current;
     if (!el) return;
+
+    let captureTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const capture = () => {
+      const r = renditionRef.current;
+      const book = bookRef.current;
+      if (!r || !book) return;
+      try {
+        const loc = r.currentLocation() as Location | null;
+        const rawStart = (loc as unknown as { start?: { cfi?: string; href?: string } })?.start;
+        let cfi = rawStart?.cfi;
+        const endCfi = (loc as unknown as { end?: { cfi?: string } })?.end?.cfi;
+        // READER-005 — اگر هنوز به گره تزریقی چسبید، به گره واقعی اسنپ کن
+        if (cfi && /ns-ch-nav/.test(cfi)) {
+          cfi = endCfi && !/ns-ch-nav/.test(endCfi) ? endCfi : cfi;
+        }
+        const href = rawStart?.href ?? lastHrefRef.current;
+        if (!cfi || !href) return;
+
+        lastCfiRef.current = cfi;
+        resumeCfiRef.current = cfi;
+        resumeHrefRef.current = href;
+
+        // درصد کل جلد: مکان‌های تولیدشده > تقریب جایگاه فصل + کسر درون‌فصلی
+        let pct: number | undefined;
+        if (book.locations.total > 0) {
+          const viaLocations = book.locations.percentageFromCfi(cfi);
+          if (typeof viaLocations === 'number' && !Number.isNaN(viaLocations)) pct = viaLocations;
+        }
+        if (pct === undefined || Number.isNaN(pct)) {
+          const items = book.spine.items ?? [];
+          const idx = spineIndexOfHref(book, href);
+          const inChapter = el.scrollHeight - el.clientHeight > 0 ? el.scrollTop / (el.scrollHeight - el.clientHeight) : 0;
+          pct =
+            idx >= 0
+              ? Math.min(0.999, Math.max(0, (idx + Math.min(0.9, inChapter)) / Math.max(1, items.length)))
+              : percentageRef.current;
+        }
+        setPercentage(pct);
+        scheduleSave(cfi, href, currentChapterRef.current, pct);
+      } catch {
+        /* ignore */
+      }
+    };
+
     const onScroll = () => {
       const max = el.scrollHeight - el.clientHeight;
       setChapterPct(max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 0);
+      if (captureTimer) clearTimeout(captureTimer);
+      captureTimer = setTimeout(capture, 260);
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [isScrolled, status]);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (captureTimer) clearTimeout(captureTimer);
+    };
+  }, [isScrolled, status, scheduleSave]);
 
   /* ---------- پاک‌سازی تایمر کشیدن اسلایدر ---------- */
   useEffect(
@@ -925,8 +1168,26 @@ export default function EpubReader(props: EpubReaderProps) {
           break;
         case 'Escape':
           if (lightbox) setLightbox(null);
-          else if (panel !== 'none') setPanel('none');
-          else onExit();
+          else if (panel !== 'none') {
+            setPanel('none');
+            setExitArmed(false);
+          } else if (exitArmedRef.current) {
+            // UX-004 — دومین Escape در بازه مجاز: خروج واقعی
+            if (exitArmTimerRef.current) clearTimeout(exitArmTimerRef.current);
+            exitArmTimerRef.current = null;
+            exitArmedRef.current = false;
+            onExit();
+          } else {
+            // UX-004 — خروج دو مرحله‌ای: کاربر در حال مطالعه نباید با یک کلید کل
+            // برنامه را ببیند؛ نخستین Escape فقط هشدار می‌دهد.
+            setExitArmed(true);
+            exitArmedRef.current = true;
+            if (exitArmTimerRef.current) clearTimeout(exitArmTimerRef.current);
+            exitArmTimerRef.current = setTimeout(() => {
+              exitArmedRef.current = false;
+              setExitArmed(false);
+            }, 2800);
+          }
           break;
       }
     };
@@ -934,6 +1195,18 @@ export default function EpubReader(props: EpubReaderProps) {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [direction, settings.readingMode, panel, lightbox, goNext, goPrev, openChapters]);
+
+  /* پاک‌سازی وضعیت خروج دو مرحله‌ای */
+  const exitArmedRef = useRef(false);
+  const exitArmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  exitArmedRef.current = exitArmed;
+  useEffect(
+    () => () => {
+      if (exitArmTimerRef.current) clearTimeout(exitArmTimerRef.current);
+      if (imgTapTimerRef.current) clearTimeout(imgTapTimerRef.current);
+    },
+    [],
+  );
 
   /* ---------- تمام‌صفحه ---------- */
   const toggleFullscreen = useCallback(async () => {
@@ -960,7 +1233,8 @@ export default function EpubReader(props: EpubReaderProps) {
   const handleAddBookmark = useCallback(async () => {
     const cfi = lastCfiRef.current;
     if (!cfi) return;
-    const label = currentChapter || `نشانک در ${Math.round(percentage * 100)}٪`;
+    // VIS-002 — برچسب نشانک با ارقام فارسی (هماهنگ با کل رابط)
+    const label = currentChapter || `نشانک در ${faDigits(Math.round(percentage * 100))}٪`;
     onAddBookmark(label, cfi, lastHrefRef.current ?? '');
   }, [currentChapter, percentage, onAddBookmark]);
 
@@ -1119,7 +1393,7 @@ export default function EpubReader(props: EpubReaderProps) {
           <button type="button" className="tbtn" onClick={() => setPanel((p) => (p === 'settings' ? 'none' : 'settings'))} aria-label="تنظیمات نمایش" title="تنظیمات (S)">
             <Settings2 size={19} />
           </button>
-          <button type="button" className="tbtn" onClick={() => void toggleFullscreen()} aria-label="تمام‌صفحه" title="تمام‌صفحه (F)">
+          <button type="button" className="tbtn btn-fs" onClick={() => void toggleFullscreen()} aria-label="تمام‌صفحه" title="تمام‌صفحه (F)">
             {isFullscreen ? <Minimize size={19} /> : <Maximize size={19} />}
           </button>
         </div>
@@ -1139,6 +1413,10 @@ export default function EpubReader(props: EpubReaderProps) {
           className={`reader-container ${isScrolled ? 'scrolled' : ''}`}
           style={isScrolled ? { paddingBlock: '1rem' } : undefined}
           onClick={onContainerTap}
+          /* A11Y-004 — ناحیه اسکرول باید با صفحه‌کلید قابل فوکوس باشد (axe: scrollable-region-focusable) */
+          tabIndex={isScrolled ? 0 : undefined}
+          role={isScrolled ? 'region' : undefined}
+          aria-label={isScrolled ? 'محتوای کتاب' : undefined}
         >
           <div
             ref={hostRef}
@@ -1264,7 +1542,15 @@ export default function EpubReader(props: EpubReaderProps) {
       {/* راهنمای یک‌باره لمس وسط صفحه — غیرتعاملی و بدون مزاحمت برای لمس‌ها */}
       {status === 'ready' && tapHint && !chromeVisible && (
         <div className="tap-hint" role="status">
-          برای نمایش یا مخفی‌کردن کنترل‌ها، وسط صفحه را لمس کنید
+          برای نمایش یا مخفی‌کردن کنترل‌ها، وسط صفحه را لمس کنید؛ برای بزرگ‌نمایی تصویر، روی آن دوبار بزنید
+        </div>
+      )}
+
+      {/* UX-004 — هشدار خروج دو مرحله‌ای با Escape */}
+      {exitArmed && (
+        <div className="exit-arm-hint" role="status">
+          <CornerDownRight size={14} aria-hidden="true" />
+          برای خروج از کتاب، دوباره Escape بزنید
         </div>
       )}
 
@@ -1306,23 +1592,46 @@ export default function EpubReader(props: EpubReaderProps) {
               {toc.length > 0 && filteredToc.length === 0 && (
                 <p className="cp-empty">فصلی با این عنوان پیدا نشد.</p>
               )}
-              {filteredToc.map((item) => {
+              {/* UX-003 — در فهرست‌های بلند (۲۱۲ فصلی)، دکمه چسبان «پرش به فصل جاری» */}
+              {toc.length >= 15 && filteredToc.length > 0 && currentTocIndex >= 0 && (
+                <button
+                  type="button"
+                  className="cp-jump"
+                  onClick={() => {
+                    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    currentTocRef.current?.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
+                  }}
+                >
+                  <LocateFixed size={15} aria-hidden="true" />
+                  پرش به فصل جاری
+                  <CornerDownRight size={13} aria-hidden="true" style={{ opacity: 0.7 }} />
+                </button>
+              )}
+              {filteredToc.map((item, listIdx) => {
                 const current = item.num - 1 === currentTocIndex;
+                /* UX-003 — سرگروه‌های ده‌تایی برای فهرست‌های بلند (وقتی فیلتر فعال نیست) */
+                const showDecade = toc.length > 30 && !chFilter.trim() && listIdx > 0 && (item.num - 1) % 10 === 0;
                 return (
-                  <div
-                    key={`${item.href}-${item.num}`}
-                    ref={current ? currentTocRef : undefined}
-                    className={`toc-item ${current ? 'current' : ''}`}
-                    style={{ paddingInlineStart: `${0.7 + item.depth * 0.9}rem` }}
-                    onClick={() => void jumpTo(item.href)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && void jumpTo(item.href)}
-                  >
-                    <span className="idx">{faDigits(item.num)}</span>
-                    <span className="t">{item.title}</span>
-                    {current && <span className="now">در حال مطالعه</span>}
-                  </div>
+                  <Fragment key={`${item.href}-${item.num}`}>
+                    {showDecade && (
+                      <div className="cp-decade" aria-hidden="true">
+                        {faDigits(item.num - 1)} تا {faDigits(Math.min(item.num + 8, toc.length))}
+                      </div>
+                    )}
+                    <div
+                      ref={current ? currentTocRef : undefined}
+                      className={`toc-item ${current ? 'current' : ''}`}
+                      style={{ paddingInlineStart: `${0.7 + item.depth * 0.9}rem` }}
+                      onClick={() => void jumpTo(item.href)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && void jumpTo(item.href)}
+                    >
+                      <span className="idx">{faDigits(item.num)}</span>
+                      <span className="t">{item.title}</span>
+                      {current && <span className="now">در حال مطالعه</span>}
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -1398,7 +1707,7 @@ export default function EpubReader(props: EpubReaderProps) {
                   maxWidth: 42,
                   pageMargin: 24,
                   textAlign: 'justify',
-                  direction: 'rtl',
+                  direction: 'auto', // UX-001 — هم‌تراز با پیش‌فرض جدید
                   readingMode: 'scrolled',
                   textColor: null,
                   bgColor: null,

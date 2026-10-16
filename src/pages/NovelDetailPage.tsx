@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -301,44 +301,52 @@ export default function NovelDetailPage() {
                   {vol.chapters.map((ch, i) => {
                     const isRead = readSet.has(ch.href);
                     const isCurrent = currentHref === ch.href;
+                    /* UX-003 — سرگروه‌های ده‌تایی برای کتاب‌های پرفصل (مثل ۲۱۲ فصلی) */
+                    const showDecade = vol.chapters.length > 30 && i > 0 && i % 10 === 0;
                     return (
-                      <div
-                        key={ch.href}
-                        className={`chapter-item ${isRead ? 'read' : ''}`}
-                        onClick={() => navigate(`/read/${novel.id}/${vol.id}?ch=${encodeURIComponent(ch.href)}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`/read/${novel.id}/${vol.id}?ch=${encodeURIComponent(ch.href)}`);
-                          }
-                        }}
-                        role="link"
-                        tabIndex={0}
-                      >
-                        <span className="num">{faDigits(i + 1)}.</span>
-                        <span className="title">{ch.title}</span>
-                        {isCurrent && <span className="reading">در حال خواندن</span>}
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          style={{ width: 28, height: 28, border: 'none', background: 'transparent' }}
-                          title={isRead ? 'علامت‌گذاری به عنوان نخوانده' : 'علامت‌گذاری به عنوان خوانده‌شده'}
-                          aria-label={isRead ? 'حذف علامت خوانده‌شده' : 'علامت‌گذاری خوانده‌شده'}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void toggleChapterRead(vol.id, ch.href);
-                          }}
-                        >
-                          <FileText size={14} color={isRead ? 'var(--ok)' : 'var(--muted)'} />
-                        </button>
-                        {isRead && (
-                          <span className="check">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                          </span>
+                      <Fragment key={ch.href}>
+                        {showDecade && (
+                          <div className="chapter-divider" aria-hidden="true">
+                            {faDigits(i)} تا {faDigits(Math.min(i + 9, vol.chapters.length))}
+                          </div>
                         )}
-                      </div>
+                        <div
+                          className={`chapter-item ${isRead ? 'read' : ''}`}
+                          onClick={() => navigate(`/read/${novel.id}/${vol.id}?ch=${encodeURIComponent(ch.href)}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/read/${novel.id}/${vol.id}?ch=${encodeURIComponent(ch.href)}`);
+                            }
+                          }}
+                          role="link"
+                          tabIndex={0}
+                        >
+                          <span className="num">{faDigits(i + 1)}.</span>
+                          <span className="title">{ch.title}</span>
+                          {isCurrent && <span className="reading">در حال خواندن</span>}
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            style={{ width: 28, height: 28, border: 'none', background: 'transparent' }}
+                            title={isRead ? 'علامت‌گذاری به عنوان نخوانده' : 'علامت‌گذاری به عنوان خوانده‌شده'}
+                            aria-label={isRead ? 'حذف علامت خوانده‌شده' : 'علامت‌گذاری خوانده‌شده'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void toggleChapterRead(vol.id, ch.href);
+                            }}
+                          >
+                            <FileText size={14} color={isRead ? 'var(--ok)' : 'var(--muted)'} />
+                          </button>
+                          {isRead && (
+                            <span className="check">
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            </span>
+                          )}
+                        </div>
+                      </Fragment>
                     );
                   })}
                 </div>

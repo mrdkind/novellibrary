@@ -29,12 +29,13 @@ export const THEME_PALETTES: Record<Exclude<ReaderTheme, 'custom'>, ThemePalette
   },
   light: {
     bg: '#fbf9f4', fg: '#2b2e35', link: '#8a5508',
-    chrome: '#f2eee3', muted: '#777d8a', border: '#ddd6c6',
+    /* A11Y-001: muted قبلی #777d8a روی کروم روشن فقط ~۳٫۶:۱ بود */
+    chrome: '#f2eee3', muted: '#646a78', border: '#ddd6c6',
     label: 'روشن', swatch: ['#fbf9f4', '#2b2e35'],
   },
   sepia: {
     bg: '#f4ecd8', fg: '#4a4234', link: '#7a5a20',
-    chrome: '#ece2c8', muted: '#8a7f68', border: '#ddd0b0',
+    chrome: '#ece2c8', muted: '#6b614d', border: '#ddd0b0',
     label: 'سپیا', swatch: ['#f4ecd8', '#4a4234'],
   },
   midnight: {
@@ -49,12 +50,12 @@ export const THEME_PALETTES: Record<Exclude<ReaderTheme, 'custom'>, ThemePalette
   },
   sage: {
     bg: '#eef0e6', fg: '#37402f', link: '#4c7a4f',
-    chrome: '#e3e6d7', muted: '#7d8772', border: '#ccd2ba',
+    chrome: '#e3e6d7', muted: '#5d6753', border: '#ccd2ba',
     label: 'سبز ملایم', swatch: ['#eef0e6', '#4c7a4f'],
   },
   slate: {
     bg: '#e8eaee', fg: '#2c3138', link: '#3f6c8f',
-    chrome: '#dde0e6', muted: '#6f7680', border: '#c6cbd4',
+    chrome: '#dde0e6', muted: '#5d646e', border: '#c6cbd4',
     label: 'خاکستری', swatch: ['#e8eaee', '#3f6c8f'],
   },
 };
@@ -269,12 +270,24 @@ export function columnWidthCss(s: ReaderSettings): string {
   return `#ns-column { max-width: ${s.maxWidth}rem; margin-inline: auto; }`;
 }
 
-/** تعیین جهت مؤثر کتاب بر اساس تنظیم و زبان کتاب */
-export function effectiveDirection(s: ReaderSettings, bookLanguage: string | null | undefined): 'rtl' | 'ltr' {
+/** تعیین جهت مؤثر کتاب بر اساس تنظیم و زبان کتاب.
+ *
+ * UX-001 — وقتی تنظیم روی «خودکار» است:
+ *  ۱) زبان جلد/کتاب ملاک است (fa/ar/… → RTL).
+ *  ۲) اگر زبان در دسترس نبود، متادیتای direction کاتالوگ (novel.direction) به‌عنوان
+ *     فالبک استفاده می‌شود — تا فیلد direction کاتالوگ دیگر «داده مرده» نباشد. */
+export function effectiveDirection(
+  s: ReaderSettings,
+  bookLanguage: string | null | undefined,
+  bookDirection?: 'auto' | 'rtl' | 'ltr' | null,
+): 'rtl' | 'ltr' {
   if (s.direction === 'auto') {
-    const lang = (bookLanguage ?? '').toLowerCase();
-    const rtlLangs = ['fa', 'ar', 'he', 'ur', 'ps', 'ckb', 'sd'];
-    return rtlLangs.some((l) => lang.startsWith(l)) ? 'rtl' : 'ltr';
+    const lang = (bookLanguage ?? '').trim().toLowerCase();
+    if (lang) {
+      const rtlLangs = ['fa', 'ar', 'he', 'ur', 'ps', 'ckb', 'sd'];
+      return rtlLangs.some((l) => lang.startsWith(l)) ? 'rtl' : 'ltr';
+    }
+    return bookDirection === 'ltr' ? 'ltr' : 'rtl';
   }
   return s.direction;
 }
@@ -296,11 +309,18 @@ export const CHAPTER_NAV_CSS = `
     border: 1px solid rgba(128, 128, 128, 0.32);
     border-radius: 14px;
     background: rgba(128, 128, 128, 0.07);
+    /* READER-003 — در فونت‌های بزرگ هرگز از قاب بیرون نزن */
+    max-width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
   }
   /* فاصله بیشتر از آخرین پاراگراف فصل — درخواست کاربر: دکمه‌ها روی متن نیفتند */
   .ns-ch-nav.ns-end { margin-block-start: 2.6rem; }
   .ns-ch-nav button {
     flex: 1;
+    /* READER-003 — بدون min-width:0 فلکس آیتم زیر min-content جمع نمی‌شود
+     * و نوار در ۲۲۰٪ روی نمایشگر باریک سرریز می‌کرد */
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -321,6 +341,7 @@ export const CHAPTER_NAV_CSS = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
   }
   .ns-ch-nav button:not(:disabled):hover { background: rgba(128, 128, 128, 0.27); }
   .ns-ch-nav button:not(:disabled):active { transform: scale(0.97); }

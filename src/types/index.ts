@@ -191,8 +191,9 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   maxWidth: 42,
   pageMargin: 24,
   textAlign: 'justify',
-  // پیش‌فرض فارسی: راست‌به‌چپ (کاربر می‌تواند «خودکار» یا LTR را انتخاب کند)
-  direction: 'rtl',
+  // UX-001 — پیش‌فرض «خودکار»: جهت از زبان/متادیتای کتاب تعیین می‌شود تا
+  // کتاب‌های انگلیسی با RTL باز نشوند؛ کاربر همچنان می‌تواند دستی RTL/LTR قفل کند
+  direction: 'auto',
   readingMode: 'scrolled',
   // کنترل‌ها هنگام ورود مخفی هستند تا روی متن نیفتند؛ با لمس وسط صفحه ظاهر می‌شوند
   showToolbar: false,

@@ -45,7 +45,9 @@ function Header() {
   return (
     <header className="site-header">
       <div className="container header-inner">
-        <Link to="/" className="brand" aria-label={`${SITE_NAME} (${SITE_NAME_EN}) — صفحه اصلی`} title={`${SITE_NAME} | ${SITE_NAME_EN}`}>
+        {/* A11Y-002 — برچسب در نام (WCAG 2.5.3): نام قابل دسترس باید شامل متن قابل
+         * مشاهده باشد؛ aria-label قبلی متن دیده‌شده را نداشت. متن پنهان اضافه می‌شود. */}
+        <Link to="/" className="brand" title={`${SITE_NAME} | ${SITE_NAME_EN}`}>
           <span className="logo" aria-hidden="true">
             <BookOpen size={21} strokeWidth={2.2} />
           </span>
@@ -55,6 +57,7 @@ function Header() {
               {SITE_NAME_EN} — {SITE_TAGLINE}
             </small>
           </span>
+          <span className="sr-only">— صفحه اصلی</span>
         </Link>
 
         <nav className={`main-nav ${menuOpen ? 'open' : ''}`} aria-label="منوی اصلی">

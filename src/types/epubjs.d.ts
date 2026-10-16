@@ -35,6 +35,8 @@ declare module 'epubjs' {
     snap?: boolean | Record<string, unknown>;
     minSpreadWidth?: number;
     stylesheet?: string;
+    /** READER-005 — کلاسی که هنگام تولید/حل CFI نادیده گرفته می‌شود */
+    ignoreClass?: string;
   }
 
   export interface Themes {
@@ -48,7 +50,22 @@ declare module 'epubjs' {
   export interface Contents {
     document: Document;
     window: Window;
+    /** اندیس spine فصل جاری (برای حل مسیر منابع داخل بسته) */
+    sectionIndex: number;
     on(type: string, handler: (event: unknown) => void): void;
+  }
+
+  /** READER-002 — دسترسی به تولید blob URL منابع داخل بسته EPUB */
+  export interface BookResources {
+    createUrl(url: string): Promise<string>;
+    replacements(): Promise<string[]>;
+  }
+
+  /** ابزار CFI epub.js — برای حل دقیق CFI به عنصر DOM (بیمهٔ فرود اسکرول) */
+  export class EpubCFI {
+    constructor(cfiFrom?: string | Range | Node, base?: string | Record<string, unknown>, ignoreClass?: string);
+    toRange(doc?: Document, ignoreClass?: string): Range;
+    toString(): string;
   }
 
   export class Book {
@@ -65,6 +82,10 @@ declare module 'epubjs' {
       total: number;
     };
     metadata: Record<string, string>;
+    /** منابع بسته (برای بازنویسی مسیر تصاویر) */
+    resources: BookResources;
+    /** مسیر فایل OPF داخل بسته — پوشه‌اش مبنای مسیرهای manifest است */
+    path?: { directory?: string; path?: string };
     canRender?: boolean;
     constructor(urlOrData?: string | ArrayBuffer, options?: EpubOptions);
     open(input: string | ArrayBuffer, what?: string): Promise<void>;
