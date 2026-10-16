@@ -61,6 +61,18 @@ declare module 'epubjs' {
     replacements(): Promise<string[]>;
   }
 
+  /** ۱٫۶٫۰ — فصل اسپاین برای جست‌وجوی درون‌کتابی (باز/بستن سند و ساخت CFI) */
+  export interface SpineSection {
+    href: string;
+    index: number;
+    cfiBase?: string;
+    document?: Document;
+    load(request?: unknown): Promise<unknown>;
+    unload(): void;
+    cfiFromRange(range: Range): string;
+    cfiFromElement(el: Element): string;
+  }
+
   /** ابزار CFI epub.js — برای حل دقیق CFI به عنصر DOM (بیمهٔ فرود اسکرول) */
   export class EpubCFI {
     constructor(cfiFrom?: string | Range | Node, base?: string | Record<string, unknown>, ignoreClass?: string);
@@ -71,8 +83,10 @@ declare module 'epubjs' {
   export class Book {
     loaded: Record<string, Promise<unknown>>;
     spine: {
-      get(target?: string | number): { href: string; cfiFromElement?: unknown } | undefined;
+      get(target?: string | number): SpineSection | undefined;
       items: Array<{ href: string }>;
+      /** ۱٫۶٫۰ — اشیاء کامل Section (برای جست‌وجوی درون‌کتابی) */
+      spineItems?: SpineSection[];
     };
     locations: {
       generate(chars?: number): Promise<number>;
@@ -84,6 +98,8 @@ declare module 'epubjs' {
     metadata: Record<string, string>;
     /** منابع بسته (برای بازنویسی مسیر تصاویر) */
     resources: BookResources;
+    /** ۱٫۶٫۰ — خواندن یک منبع داخلی (برای بارگذاری فصل‌ها در جست‌وجوی درون‌کتابی) */
+    load(path: string): Promise<unknown>;
     /** مسیر فایل OPF داخل بسته — پوشه‌اش مبنای مسیرهای manifest است */
     path?: { directory?: string; path?: string };
     canRender?: boolean;
@@ -96,6 +112,25 @@ declare module 'epubjs' {
 
   export class Rendition {
     themes: Themes;
+    /** ۱٫۶٫۰ — یادداشت‌ها برای هایلایت نتیجه جست‌وجو */
+    annotations: {
+      add(
+        type: string,
+        cfiRange: string,
+        data?: unknown,
+        cb?: unknown,
+        className?: string,
+        styles?: Record<string, string>,
+      ): unknown;
+      highlight(
+        cfiRange: string,
+        data?: unknown,
+        cb?: unknown,
+        className?: string,
+        styles?: Record<string, string>,
+      ): unknown;
+      remove(cfiRange: string, type: string): void;
+    };
     constructor(book: Book, options: RenderOptions);
     display(target?: string): Promise<unknown>;
     prev(): Promise<unknown>;

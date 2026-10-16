@@ -34,7 +34,7 @@ export const REPO_URL = '';
 export const CONTACT_URL = '';
 
 /** نسخه پشتیبان Export/Import */
-export const APP_VERSION = '1.5.6';
+export const APP_VERSION = '1.6.0';
 
 /** سقف پیشرفت‌های ذخیره‌شده در تاریخچه */
 export const HISTORY_LIMIT = 60;

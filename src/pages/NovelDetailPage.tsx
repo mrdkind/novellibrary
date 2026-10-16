@@ -16,12 +16,17 @@ import {
   ShieldCheck,
   Tag,
   User,
+  WifiOff,
+  Download,
 } from 'lucide-react';
 import { novelById, displayTitle, originalTitle, STATUS_LABELS, totalChapters } from '@/services/catalog';
 import { faDigits } from '@/services/persian';
 import { useCatalog } from '@/hooks/useCatalog';
 import { usePersonalData } from '@/hooks/usePersonalData';
+import { useOfflineLibrary } from '@/hooks/useOfflineLibrary';
 import * as repo from '@/storage/repositories';
+import * as offline from '@/services/offline';
+import { loadEpub } from '@/services/epubLoader';
 import { CoverImage } from '@/components/CoverImage';
 import { ErrorBox, LoadingBox } from '@/components/StateBoxes';
 import { ConfirmDialog } from '@/components/Modal';
@@ -39,6 +44,9 @@ export default function NovelDetailPage() {
   const [readChapters, setReadChapters] = useState<Map<string, Set<string>>>(new Map());
   const [bookmarkDlgOpen, setBookmarkDlgOpen] = useState(false);
   const [confirmRemoveBookmarks, setConfirmRemoveBookmarks] = useState(false);
+  /* ۱٫۶٫۰ — وضعیت دانلود آفلاین هر جلد + پیشرفت درون‌صفحه‌ای */
+  const offlineLib = useOfflineLibrary();
+  const [dlProgress, setDlProgress] = useState<Map<string, { loaded: number; total: number | null }>>(new Map());
 
   const novel = useMemo(() => novelById(novels, novelId), [novels, novelId]);
   const title = novel ? displayTitle(novel) : 'کتاب';
@@ -119,6 +127,39 @@ export default function NovelDetailPage() {
     }
     const set = await repo.getReadChaptersOfVolume(novel.id, volumeId);
     setReadChapters((m) => new Map(m).set(volumeId, set));
+  };
+
+  /* ---------- ۱٫۶٫۰ — دانلود/حذف جلد برای مطالعه بدون اینترنت ---------- */
+  const downloadVolume = async (vol: { id: string; file: string; title: string; size: number | null }) => {
+    try {
+      // نخستین دانلود: درخواست ذخیره‌سازی پایدار تا مرورگر کش را خودبه‌خود پاک نکند
+      void offline.requestPersistence();
+      const buffer = await loadEpub(vol.file, (p) => {
+        setDlProgress((m) => new Map(m).set(vol.id, p));
+      });
+      await offline.saveOffline(novel.id, vol.id, buffer, {
+        title: vol.title,
+        bookTitle: title,
+      });
+      setDlProgress((m) => {
+        const next = new Map(m);
+        next.delete(vol.id);
+        return next;
+      });
+      toast('جلد برای مطالعه بدون اینترنت ذخیره شد', 'success');
+    } catch (e) {
+      setDlProgress((m) => {
+        const next = new Map(m);
+        next.delete(vol.id);
+        return next;
+      });
+      toast(e instanceof Error && e.name !== 'AbortError' ? e.message : 'دانلود ناموفق بود', 'error');
+    }
+  };
+
+  const removeVolumeOffline = async (volId: string) => {
+    await offline.removeOffline(novel.id, volId);
+    toast('نسخه آفلاین این جلد حذف شد', 'info');
   };
 
   return (
@@ -282,6 +323,40 @@ export default function NovelDetailPage() {
                   <button type="button" className="btn small primary" onClick={() => startReading(vol.id)}>
                     <Play size={14} /> خواندن
                   </button>
+                  {/* ۱٫۶٫۰ — دانلود برای مطالعه بدون اینترنت (اختیاری؛ طبق نقشه راه ممیزی) */}
+                  {offlineLib.has(novel.id, vol.id) ? (
+                    <button
+                      type="button"
+                      className="btn small offline-cached"
+                      onClick={() => void removeVolumeOffline(vol.id)}
+                      title="این جلد روی همین دستگاه ذخیره شده است؛ برای حذف کلیک کنید"
+                      aria-label="حذف نسخه آفلاین این جلد"
+                    >
+                      <WifiOff size={13} /> آفلاین
+                    </button>
+                  ) : dlProgress.has(vol.id) ? (
+                    (() => {
+                      const p = dlProgress.get(vol.id);
+                      const pct = p?.total ? Math.round((p.loaded / p.total) * 100) : null;
+                      return (
+                        <span className="btn small offline-progress" role="status">
+                          {pct !== null
+                            ? `${faDigits(pct)}٪`
+                            : formatBytes(p?.loaded ?? 0)}
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn small"
+                      onClick={() => void downloadVolume(vol)}
+                      title="دانلود این جلد در مرورگر برای مطالعه بدون اینترنت"
+                      aria-label={`دانلود جلد ${vol.title} برای مطالعه بدون اینترنت`}
+                    >
+                      <Download size={13} /> آفلاین
+                    </button>
+                  )}
                   {novel.volumes.length > 1 && (
                     <button type="button" className="collapse-toggle" onClick={() => toggleVolume(vol.id)} aria-expanded={isOpen}>
                       {isOpen ? (

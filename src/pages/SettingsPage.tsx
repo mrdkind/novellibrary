@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BookText,
   Database,
@@ -14,16 +14,21 @@ import {
   Trash2,
   Type,
   UploadCloud,
+  WifiOff,
 } from 'lucide-react';
 import { usePersonalData } from '@/hooks/usePersonalData';
 import { useTheme } from '@/hooks/useTheme';
+import { useOfflineLibrary } from '@/hooks/useOfflineLibrary';
 import type { ReaderSettings, ReaderTheme } from '@/types';
 import { DEFAULT_READER_SETTINGS } from '@/types';
 import * as repo from '@/storage/repositories';
 import { clearAll } from '@/storage/db';
+import * as offline from '@/services/offline';
+import { faDigits } from '@/services/persian';
 import { ConfirmDialog } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
 import { useDocumentTitle } from '@/hooks/misc';
+import { formatBytes } from '@/services/epubLoader';
 import { THEME_PALETTES } from '@/reader/readerSettings';
 
 function Toggle({
@@ -108,6 +113,14 @@ export default function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<{ file: File; mode: repo.ImportMode } | null>(null);
   const [confirmClear, setConfirmClear] = useState<'all' | 'history' | null>(null);
   const [pendingReset, setPendingReset] = useState(false);
+  /* ۱٫۶٫۰ — مدیریت کتاب‌های آفلاین */
+  const offlineLib = useOfflineLibrary();
+  const [storageInfo, setStorageInfo] = useState<offline.StorageEstimateInfo>({ usage: null, quota: null });
+  const [confirmClearOffline, setConfirmClearOffline] = useState(false);
+
+  useEffect(() => {
+    void offline.storageEstimate().then(setStorageInfo);
+  }, [offlineLib.records]);
 
   const s = personal.readerSettings;
   const setS = (patch: Partial<ReaderSettings>) => {
@@ -576,6 +589,69 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* ۱٫۶٫۰ — مطالعه آفلاین */}
+      <div className="settings-card">
+        <h2>
+          <WifiOff size={19} /> مطالعه آفلاین
+        </h2>
+        <p className="desc">
+          جلدهایی که در صفحه کتاب با دکمه «آفلاین» دانلود کرده‌اید، در مرورگر همین دستگاه ذخیره می‌شوند و بدون
+          اینترنت هم باز می‌شوند. این فایل‌ها جزو پشتیبان JSON نیستند و حذفشان فقط از همین‌جا یا دکمه «آفلاین»
+          صفحه کتاب ممکن است.
+        </p>
+        {!offline.isSupported() ? (
+          <p className="desc">مرورگر شما از ذخیره‌سازی محلی پشتیبانی نمی‌کند؛ مطالعه آفلاین در دسترس نیست.</p>
+        ) : offlineLib.records.length === 0 ? (
+          <p className="desc">هنوز جلدی برای مطالعه بدون اینترنت ذخیره نکرده‌اید؛ در صفحه هر کتاب، کنار دکمه «خواندن»، دکمه «آفلاین» را بزنید.</p>
+        ) : (
+          <>
+            <div className="setting-row col">
+              <div className="control offline-list">
+                {offlineLib.records.map((rec) => (
+                  <div key={rec.key} className="offline-item">
+                    <div className="oi-info">
+                      <div className="oi-title">{rec.title}</div>
+                      <div className="oi-sub">
+                        {rec.bookTitle} ؛ {formatBytes(rec.size)} ؛{' '}
+                        {new Date(rec.savedAt).toLocaleDateString('fa-IR')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn small"
+                      aria-label={`حذف نسخه آفلاین جلد ${rec.title}`}
+                      onClick={async () => {
+                        await offline.removeOffline(rec.bookId, rec.volumeId);
+                        toast(`«${rec.title}» از حافظه آفلاین حذف شد`, 'info');
+                      }}
+                    >
+                      <Trash2 size={14} /> حذف
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <div className="label">حجم کل کتاب‌های آفلاین</div>
+                <div className="hint">
+                  {faDigits(offlineLib.records.length)} جلد ؛
+                  {' '}{formatBytes(offlineLib.records.reduce((s, r) => s + r.size, 0))}
+                  {storageInfo.usage !== null
+                    ? ` ؛ مجموع مصرف مرورگر: ${formatBytes(storageInfo.usage)}`
+                    : ''}
+                </div>
+              </div>
+              <div className="control">
+                <button type="button" className="btn danger" onClick={() => setConfirmClearOffline(true)}>
+                  <Trash2 size={15} /> حذف همه کتاب‌های آفلاین
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* داده‌های شخصی */}
       <div className="settings-card">
         <h2>
@@ -707,7 +783,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={confirmClear === 'all'}
         title="پاک‌کردن همه داده‌های شخصی؟"
-        message="پیشرفت مطالعه، نشانک‌ها، علاقه‌مندی‌ها، تاریخچه و تنظیمات شما به‌طور کامل از مرورگر حذف می‌شوند. این عمل قابل بازگشت نیست."
+        message="پیشرفت مطالعه، نشانک‌ها، علاقه‌مندی‌ها، تاریخچه، تنظیمات و کتاب‌های آفلاین به‌طور کامل از مرورگر حذف می‌شوند. این عمل قابل بازگشت نیست."
         confirmLabel="همه را پاک کن"
         danger
         onConfirm={async () => {
@@ -717,6 +793,20 @@ export default function SettingsPage() {
           toast('همه داده‌های شخصی پاک شدند', 'success');
         }}
         onCancel={() => setConfirmClear(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmClearOffline}
+        title="حذف همه کتاب‌های آفلاین؟"
+        message="فایل‌های دانلودشده برای مطالعه بدون اینترنت از حافظه مرورگر حذف می‌شوند؛ پیشرفت مطالعه و نشانک‌ها باقی می‌مانند و هر زمان دوباره می‌توانید جلدها را دانلود کنید."
+        confirmLabel="حذف همه"
+        danger
+        onConfirm={async () => {
+          setConfirmClearOffline(false);
+          await offline.clearOffline();
+          toast('همه کتاب‌های آفلاین حذف شدند', 'info');
+        }}
+        onCancel={() => setConfirmClearOffline(false)}
       />
 
       {/* inputهای مخفی فایل */}

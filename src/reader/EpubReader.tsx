@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import type { Bookmark, CustomFont, Novel, ReaderSettings, Volume } from '@/types';
 import { loadEpub, formatBytes } from '@/services/epubLoader';
+import { searchInBook } from './bookSearch';
+import type { BookSearchHit } from './bookSearch';
 import { faDigits } from '@/services/persian';
 import { faIncludes } from '@/services/normalize';
 import {
@@ -247,7 +249,7 @@ export default function EpubReader(props: EpubReaderProps) {
   const [percentage, setPercentage] = useState(savedPercentage ?? 0);
   const [currentChapter, setCurrentChapter] = useState('');
   const [toc, setToc] = useState<FlatTocItem[]>([]);
-  const [panel, setPanel] = useState<'none' | 'chapters' | 'settings' | 'bookmarks'>('none');
+  const [panel, setPanel] = useState<'none' | 'chapters' | 'settings' | 'bookmarks' | 'search'>('none');
   /* کنترل‌ها به‌صورت پیش‌فرض مخفی‌اند تا روی متن نیفتند؛
    * لمس/کلیک روی وسط صفحه نمایش/مخفی‌کردن می‌کند (طبق درخواست کاربر).
    * ترجیح «showToolbar» فقط تعیین می‌کند هنگام ورود چه وضعیتی باشد. */
@@ -265,6 +267,13 @@ export default function EpubReader(props: EpubReaderProps) {
   const [scrubPct, setScrubPct] = useState<number | null>(null);
   /** فیلتر جست‌وجوی عنوان فصل در پاپ‌آپ */
   const [chFilter, setChFilter] = useState('');
+  /* ---------- ۱٫۶٫۰ — جست‌وجوی متن داخل کتاب ---------- */
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<BookSearchHit[]>([]);
+  const [searchState, setSearchState] = useState<'idle' | 'running' | 'done'>('idle');
+  const [searchProgress, setSearchProgress] = useState<{ done: number; total: number } | null>(null);
+  /** CFI نتیجه‌ای که با هایلایت نشان داده می‌شود */
+  const [searchActiveCfi, setSearchActiveCfi] = useState<string | null>(null);
   const [autoPaused, setAutoPaused] = useState(false);
   /** UX-004 — وضعیت «خروج دو مرحله‌ای» با Escape */
   const [exitArmed, setExitArmed] = useState(false);
@@ -301,7 +310,13 @@ export default function EpubReader(props: EpubReaderProps) {
   const chaptersDialogRef = useRef<HTMLDivElement>(null);
   const bookmarksPanelRef = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const searchDialogRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
+  /** ۱٫۶٫۰ — لغو جست‌وجوی درون‌کتابی و پاک‌کردن هایلایت قبلی */
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchHighlightRef = useRef<string | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** UX-002 — ردیابی لمس/کلیک روی تصاویر برای تشخیص دوبارلمس */
   const lastImgTapRef = useRef<{ t: number; src: string } | null>(null);
   const imgTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -436,7 +451,13 @@ export default function EpubReader(props: EpubReaderProps) {
         setErrorMsg('');
         // آماده‌سازی CSS پیش از رندر تا content hook اولین بخش را تمیز ببیند
         applyVisuals(settings);
-        const buffer = await loadEpub(volume.file, setDownload, abort.signal);
+        const buffer = await loadEpub(
+          volume.file,
+          setDownload,
+          abort.signal,
+          /* ۱٫۶٫۰ — اگر جلد برای مطالعه آفلاین دانلود شده باشد، از کش محلی خوانده می‌شود */
+          { bookId: novel.id, volumeId: volume.id },
+        );
         if (destroyed) return;
 
         setStatus('rendering');
@@ -999,6 +1020,9 @@ export default function EpubReader(props: EpubReaderProps) {
   useEffect(
     () => () => {
       if (scrubTimerRef.current) clearTimeout(scrubTimerRef.current);
+      /* ۱٫۶٫۰ — لغو جست‌وجوی ناتمام هنگام خروج از کتاب */
+      searchAbortRef.current?.abort();
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     },
     [],
   );
@@ -1008,6 +1032,101 @@ export default function EpubReader(props: EpubReaderProps) {
     setChFilter('');
     setPanel('chapters');
   }, []);
+
+  /* ---------- ۱٫۶٫۰ — جست‌وجوی متن داخل کتاب ---------- */
+
+  /** باز کردن پاپ‌آپ جست‌وجو — ورودی فوکوس و نتایج قبلی حفظ می‌شود */
+  const openSearch = useCallback(() => {
+    if (status !== 'ready') return;
+    setPanel('search');
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [status]);
+
+  /** اجرای جست‌وجو با تاخیر کوتاه پس از تایپ؛ اجرای قبلی لغو می‌شود */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (panel !== 'search' || q.length < 2) {
+      searchAbortRef.current?.abort();
+      setSearchResults([]);
+      setSearchState('idle');
+      setSearchProgress(null);
+      return;
+    }
+    const book = bookRef.current;
+    if (!book) return;
+
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      searchAbortRef.current?.abort();
+      const ac = new AbortController();
+      searchAbortRef.current = ac;
+      setSearchState('running');
+      setSearchProgress(null);
+      void searchInBook(book, q, {
+        signal: ac.signal,
+        onProgress: (p) => setSearchProgress(p),
+      })
+        .then((hits) => {
+          if (ac.signal.aborted) return;
+          setSearchResults(hits);
+          setSearchState('done');
+        })
+        .catch(() => {
+          if (ac.signal.aborted) return;
+          setSearchResults([]);
+          setSearchState('done');
+        });
+    }, 450);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery, panel]);
+
+  /** پاک‌کردن هایلایت نتیجه قبلی */
+  const clearSearchHighlight = useCallback(() => {
+    const r = renditionRef.current;
+    if (r && searchHighlightRef.current) {
+      try {
+        r.annotations.remove(searchHighlightRef.current, 'highlight');
+      } catch {
+        /* ignore */
+      }
+    }
+    searchHighlightRef.current = null;
+    setSearchActiveCfi(null);
+  }, []);
+
+  /** پرش به نتیجه جست‌وجو + هایلایت (اگر CFI ساخت‌شدنی بود) */
+  const jumpToSearchHit = useCallback(
+    async (hit: BookSearchHit) => {
+      const r = renditionRef.current;
+      const book = bookRef.current;
+      if (!r || !book) return;
+      clearSearchHighlight();
+      if (hit.cfi) {
+        await r.display(hit.cfi).catch(() => {});
+        try {
+          r.annotations.highlight(hit.cfi, {}, undefined, 'ns-search-hit');
+          searchHighlightRef.current = hit.cfi;
+          setSearchActiveCfi(hit.cfi);
+        } catch {
+          /* هایلایت حیاتی نیست */
+        }
+      } else {
+        const resolved = resolveSectionHref(book, hit.href);
+        await r.display(resolved).catch(() => {});
+      }
+      setPanel('none');
+    },
+    [clearSearchHighlight],
+  );
+
+  /** با بازسازی کتاب (تغییر جهت/حالت نمایش) هایلایت جست‌وجو بی‌معنا می‌شود */
+  useEffect(() => {
+    searchHighlightRef.current = null;
+    setSearchActiveCfi(null);
+  }, [direction, settings.readingMode]);
+
 
   /* ---------- A11Y-005 (F-06) — فوکوس‌تراپ مدال‌ها و بازیابی فوکوس ----------
    * سه پنل کتاب‌خوان (فهرست فصل‌ها، نشانک‌ها، تنظیمات) و بزرگ‌نمایی تصویر،
@@ -1019,7 +1138,9 @@ export default function EpubReader(props: EpubReaderProps) {
         ? chaptersDialogRef.current
         : panel === 'bookmarks'
           ? bookmarksPanelRef.current
-          : settingsPanelRef.current;
+          : panel === 'search'
+            ? searchDialogRef.current
+            : settingsPanelRef.current;
     if (!container) return;
     return trapFocusIn(container);
   }, [panel]);
@@ -1205,6 +1326,12 @@ export default function EpubReader(props: EpubReaderProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+      /* ۱٫۶٫۰ — Ctrl+F / Cmd+F: جست‌وجوی درون‌کتابی به‌جای جست‌وجوی مرورگر */
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
       switch (e.key) {
         case 'ArrowLeft':
           e.preventDefault();
@@ -1274,7 +1401,7 @@ export default function EpubReader(props: EpubReaderProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [direction, settings.readingMode, panel, lightbox, goNext, goPrev, openChapters]);
+  }, [direction, settings.readingMode, panel, lightbox, goNext, goPrev, openChapters, openSearch]);
 
   /* پاک‌سازی وضعیت خروج دو مرحله‌ای */
   const exitArmedRef = useRef(false);
@@ -1462,6 +1589,10 @@ export default function EpubReader(props: EpubReaderProps) {
           <div className="spacer" />
           <button type="button" className="tbtn" onClick={openChapters} aria-label="فهرست فصل‌ها" title="فهرست فصل‌ها (T)">
             <List size={19} />
+          </button>
+          {/* ۱٫۶٫۰ — جست‌وجوی متن داخل کتاب */}
+          <button type="button" className="tbtn" onClick={openSearch} aria-label="جست‌وجو در کتاب" title="جست‌وجو در کتاب (Ctrl+F)">
+            <Search size={19} />
           </button>
           <button
             type="button"
@@ -1730,6 +1861,92 @@ export default function EpubReader(props: EpubReaderProps) {
                   </Fragment>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- ۱٫۶٫۰ — پاپ‌آپ جست‌وجوی متن داخل کتاب ---------- */}
+      {panel === 'search' && (
+        <div
+          className="chapter-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPanel('none');
+          }}
+        >
+          <div ref={searchDialogRef} className="chapter-popup" role="dialog" aria-modal="true" aria-label="جست‌وجو در کتاب">
+            <header>
+              <Search size={17} />
+              <div className="cp-titles">
+                <strong>جست‌وجو در کتاب</strong>
+                <span>{volume.title}</span>
+              </div>
+              <button type="button" className="tbtn panel-close" onClick={() => setPanel('none')} aria-label="بستن">
+                <X size={18} />
+              </button>
+            </header>
+            <div className="cp-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                type="search"
+                placeholder="عبارت مورد نظر را بنویسید…"
+                aria-label="جست‌وجوی متن در این جلد"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="cp-list cp-search-results">
+              {searchState === 'idle' && (
+                <p className="cp-empty">
+                  دست‌کم دو نویسه بنویسید؛ در تمام فصل‌های این جلد با نرمال‌سازی فارسی (ي/ی، ك/ک، اعراب و نیم‌فاصله) جست‌وجو می‌شود.
+                </p>
+              )}
+              {searchState === 'running' && (
+                <p className="cp-empty" role="status">
+                  در حال جست‌وجو
+                  {searchProgress ? `؛ فصل ${faDigits(searchProgress.done + 1)} از ${faDigits(searchProgress.total)}` : '…'}
+                </p>
+              )}
+              {searchState === 'done' && searchResults.length === 0 && (
+                <p className="cp-empty">نتیجه‌ای برای این عبارت در این جلد پیدا نشد.</p>
+              )}
+              {searchState === 'done' && searchResults.length > 0 && (
+                <div className="cp-result-count" role="status">
+                  {faDigits(searchResults.length)} نتیجه
+                </div>
+              )}
+              {searchResults.map((hit, i) => {
+                const tocTitle = toc.find((t) => sameHref(t.href, hit.href))?.title;
+                const secTitle = tocTitle ?? `فصل ${faDigits(hit.spineIndex + 1)}`;
+                const active = hit.cfi !== null && hit.cfi === searchActiveCfi;
+                return (
+                  <div
+                    key={`${hit.href}-${i}`}
+                    className={`search-item ${active ? 'active' : ''}`}
+                    onClick={() => void jumpToSearchHit(hit)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void jumpToSearchHit(hit);
+                      }
+                    }}
+                  >
+                    <span className="si-sec">{secTitle}</span>
+                    <span className="si-ex">
+                      {hit.excerpt.slice(0, hit.matchStart)}
+                      <mark>{hit.excerpt.slice(hit.matchStart, hit.matchStart + hit.matchLen)}</mark>
+                      {hit.excerpt.slice(hit.matchStart + hit.matchLen)}
+                    </span>
+                  </div>
+                );
+              })}
+              {searchState === 'done' && searchResults.length >= 200 && (
+                <p className="cp-empty">نمایش تا ۲۰۰ نتیجه محدود شد؛ عبارت دقیق‌تری بنویسید.</p>
+              )}
             </div>
           </div>
         </div>

@@ -196,8 +196,10 @@ export function validateBackup(raw: unknown): { ok: true; backup: BackupFile } |
 export async function importBackup(backup: BackupFile, mode: ImportMode): Promise<ImportResult> {
   const d = backup.data;
   if (mode === 'replace') {
-    // جایگزینی کامل — فقط پس از تأیید صریح کاربر فراخوانی می‌شود
-    await Promise.all(Object.values(db.STORES).map((s) => db.clearStore(s)));
+    /* جایگزینی کامل — فقط پس از تأیید صریح کاربر فراخوانی می‌شود.
+     * ۱٫۶٫۰ — کتاب‌های آفلاین (epubCache) عمداً از جایگزینی مستثنا هستند؛
+     * واردکردن پشتیبان نباید فایل‌های دانلودشده کاربر را حذف کند. */
+    await db.clearDataStores();
   }
   await Promise.all([
     db.bulkPut(db.STORES.progress, d.progress ?? []),

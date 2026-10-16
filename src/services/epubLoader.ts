@@ -1,10 +1,16 @@
 /**
  * دریافت فایل EPUB فقط هنگام درخواست مطالعه + کش درون‌حافظه‌ای برای یک نشست.
  * برای کتاب‌های بزرگ، روند دریافت با خواندن جریانی گزارش می‌شود.
+ *
+ * ۱٫۶٫۰ — مطالعه آفلاین اختیاری: اگر کاربر جلد را «برای مطالعه بدون اینترنت»
+ * دانلود کرده باشد، محتوا از کش IndexedDB خوانده می‌شود (بدون درخواست شبکه)؛
+ * در غیر این صورت از سرور دریافت می‌شود و ذخیره آفلاین همیشه «اختیاری» است
+ * (هیچ دانلودی خودکار کش نمی‌شود).
  */
 
 import { fetchUrl } from './paths';
 import { faDigits } from './persian';
+import * as offline from './offline';
 
 interface CachedEntry {
   buffer: ArrayBuffer;
@@ -23,9 +29,22 @@ export async function loadEpub(
   relPath: string,
   onProgress?: (p: DownloadProgress) => void,
   signal?: AbortSignal,
+  /** ۱٫۶٫۰ — اگر تعیین شود، ابتدا کش مطالعه آفلاین همان جلد بررسی می‌شود */
+  offlineCtx?: { bookId: string; volumeId: string },
 ): Promise<ArrayBuffer> {
   const cached = cache.get(relPath);
   if (cached) return cached.buffer;
+
+  /* ۱٫۶٫۰ — نگاه اول به کش آفلاین: کتاب دانلودشده حتی در سکوت شبکه باز می‌شود */
+  if (offlineCtx && offline.isSupported()) {
+    const buf = await offline.getBuffer(offlineCtx.bookId, offlineCtx.volumeId);
+    if (buf) {
+      if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+      cache.set(relPath, { buffer: buf, fetchedAt: Date.now() });
+      onProgress?.({ loaded: buf.byteLength, total: buf.byteLength });
+      return buf;
+    }
+  }
 
   const url = fetchUrl(relPath);
 

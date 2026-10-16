@@ -1,10 +1,14 @@
 /**
  * لایه دسترسی به IndexedDB — مستقل از کامپوننت‌ها تا در آینده قابل جایگزینی باشد.
  * (مثلاً تبدیل به localStorage یا API ابری بدون تغییر بقیه کد)
+ *
+ * نسخه ۲ (۱٫۶٫۰): افزودن استور «epubCache» برای مطالعه آفلاین اختیاری.
+ * توجه: داده‌های EPUB آفلاین شخصی‌اند اما جزو پشتیبان Export/Import نیستند
+ * (حجم بالا) و در «واردکردن با جایگزینی» پاک نمی‌شوند.
  */
 
 const DB_NAME = 'novelshelf';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
   progress: 'progress',
@@ -13,7 +17,22 @@ export const STORES = {
   history: 'history',
   readChapters: 'readChapters',
   settings: 'settings',
+  /** ۱٫۶٫۰ — فایل‌های EPUB دانلودشده برای مطالعه بدون اینترنت */
+  epubCache: 'epubCache',
 } as const;
+
+/**
+ * استورهای «داده شخصی کوچک» که در پشتیبان‌گیری Export/Import جابه‌جا می‌شوند.
+ * epubCache عمداً خارج این فهرست است (حجم بالا و مستقل از دستگاه مقصد).
+ */
+export const DATA_STORES = [
+  STORES.progress,
+  STORES.bookmarks,
+  STORES.favorites,
+  STORES.history,
+  STORES.readChapters,
+  STORES.settings,
+] as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
 
@@ -58,6 +77,12 @@ export function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.settings)) {
         db.createObjectStore(STORES.settings, { keyPath: 'key' });
+      }
+      /* ۱٫۶٫۰ — استور مطالعه آفلاین؛ افزودن آن در همین upgrade پیاده شده تا
+       * کاربران نسخه ۱ (DB_VERSION=1) بدون پاک‌شدن داده‌ها ارتقا یابند */
+      if (!db.objectStoreNames.contains(STORES.epubCache)) {
+        const s = db.createObjectStore(STORES.epubCache, { keyPath: 'key' });
+        s.createIndex('savedAt', 'savedAt');
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -136,6 +161,17 @@ export async function clearStore(store: StoreName): Promise<void> {
 
 export async function clearAll(): Promise<void> {
   for (const store of Object.values(STORES)) {
+    await clearStore(store);
+  }
+}
+
+/**
+ * پاک‌کردن فقط داده‌های شخصی کوچک (بدون کش EPUB آفلاین).
+ * کاربرد اصلی: «واردکردن پشتیبان با جایگزینی» نباید کتاب‌های
+ * دانلودشده کاربر را حذف کند.
+ */
+export async function clearDataStores(): Promise<void> {
+  for (const store of DATA_STORES) {
     await clearStore(store);
   }
 }
