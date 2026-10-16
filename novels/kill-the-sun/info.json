@@ -1,22 +1,32 @@
 {
-  "id": "kill-the-sun",
-  "titleOriginal": "kill-the-sun",
+  "id": "Kill-the-Sun",
+  "titleOriginal": "Kill the Sun",
   "titleFa": "خورشید را بکش",
-  "titleAlt": ["kill the sun"],
-  "author": "Okina Baba",
-  "translator": null,
-  "description": "خلاصه داستان اینجا قرار می‌گیرد؛ حداقل بیست نویسه لازم است.",
-  "genres": ["فانتزی", "ایسکای"],
-  "language": "en",
-  "direction": "auto",
+  "titleAlt": [
+    "Kill the Sun",
+    "Kill The Sun"
+  ],
+  "author": "Warmaisach",
+  "translator": "MO",
+  "description": "هزاران سال پس از آخرالزمان، زمین به جهانی بی‌رحم تبدیل شده که موجودات فراطبیعی موسوم به Specters زندگی انسان‌ها را تهدید می‌کنند. نیک، پسری مبتلا به فراموشی که در محله‌ای فقیرنشین بزرگ شده، رؤیای تبدیل‌شدن به یک استخراج‌کنندهٔ زفی‌کس را دارد؛ شغلی که به انسان‌ها اجازه می‌دهد از قدرت این موجودات بهره ببرند. اما قدرتی که نیک از گذشته به دست آورده، مانعی جدی بر سر راه اوست. او باید در جهانی سرشار از خطر، راز و رنج، برای بقا و یافتن مسیر خودش مبارزه کند.",
+  "genres": [
+    "فانتزی تاریک",
+    "پساآخرالزمانی",
+    "تراژدی",
+    "معمایی",
+    "ماجراجویی",
+    "پیشرفت قدرت"
+  ],
+  "language": "fa",
+  "direction": "rtl",
   "status": "ongoing",
-  "cover": "d0ea5583-0b25-4ce4-930e-0dfe25be8cba.webp",
-  "year": 2015,
+  "cover": "",
+  "year": 2023,
   "license": null,
-  "source": null,
+  "source": "https://www.webnovel.com/book/27467949206850305",
   "notes": null,
-  "addedAt": "2026-10-15",
+  "addedAt": "2026-10-16",
   "volumes": [
-    { "file": "volume-01.epub", "title": "۲۰۰ جپتر اول", "order": 1 }
+    { "file": "volume-01.epub", "title": "بخش اول (چپتر ۱ تا 20۰)", "order": 1 }
   ]
 }

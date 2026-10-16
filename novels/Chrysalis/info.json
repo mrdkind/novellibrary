@@ -1,0 +1,34 @@
+{
+  "id": "Chrysalis",
+  "titleOriginal": "Chrysalis",
+  "titleFa": "شفیره",
+  "titleAlt": [],
+  "author": "RinoZ",
+  "translator": "MrKind",
+  "description": "آنتونی پس از تناسخ در دنیای فانتزی و بازی‌مانند پانگرا درمی‌یابد که در قالب یک مورچه به دنیا آمده است. او باید با مهارت‌های عجیب، خطرات سیاه‌چال و سازوکار تکامل کنار بیاید، زنده بماند و به‌تدریج کلونی خود را قدرتمندتر کند.",
+  "genres": [
+    "فانتزی",
+    "ماجراجویی",
+    "کمدی",
+    "لایت‌آرپی‌جی",
+    "تناسخ",
+    "قهرمان غیرانسانی",
+    "جادو"
+  ],
+  "language": "fa",
+  "direction": "rtl",
+  "status": "ongoing",
+  "cover": "cover-Chrysalis.webp",
+  "year": 2018,
+  "license": null,
+  "source": "https://www.webnovel.com/book/chrysalis_11236791006300205",
+  "notes": null,
+  "addedAt": "2026-10-16",
+  "volumes": [
+    {
+      "file": "volume-01.epub",
+      "title": "بخش اول (چپتر ۱ تا ۵۰)",
+      "order": 1
+    }
+  ]
+}
